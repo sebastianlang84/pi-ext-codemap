@@ -1,12 +1,18 @@
 {
   "name": "pi-ext-code-search",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local SQLite/FTS codebase search and context tools for Pi coding agents.",
   "type": "module",
-  "keywords": ["pi-package", "pi-extension", "code-search"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "code-search"
+  ],
   "license": "MIT",
   "pi": {
-    "extensions": ["./src/pi-extension/index.ts"]
+    "extensions": [
+      "./src/pi-extension/index.ts"
+    ]
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
