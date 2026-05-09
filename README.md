@@ -1,47 +1,73 @@
 # pi-ext-code-search
 
-Local SQLite/FTS codebase search and context tools for Pi coding agents.
+Local SQLite/FTS codebase search for Pi coding agents. It indexes the current Git repository and gives agents fast path, symbol, and source-chunk lookup without sending code to a remote service.
+
+## What it can do
+
+- Build a local search index for the current Git repository.
+- Search indexed paths, cheap symbols, and source chunks.
+- Return compact read-first context for a file, symbol, or natural-language query.
+- Warn when the index is stale without silently mutating it.
+- Skip symlinks, binary/generated files, secret-like files, and heavy directories.
+- Store indexes locally under `~/.pi/agent/code-search/`.
 
 ## Tools
 
-- `codebase_status` — show approval/index diagnostics for the current Git repo; cheap by default, pass `full: true` for stale-index counts.
-- `codebase_index` — approve and/or refresh the local index.
-- `codebase_search` — search indexed paths, symbols, and chunks; returns `{ query, root, stale, changed, missing, deleted, warnings, results }` so stale-index warnings are visible when the local index is out of date.
-- `codebase_context` — get a compact read-first context package for a path or symbol; includes `{ stale, changed, missing, deleted, warnings }` diagnostics.
+| Tool | Use it for |
+| --- | --- |
+| `codebase_status` | Show approval and index status. Cheap by default; pass `full: true` for stale-index diagnostics. |
+| `codebase_index` | Approve a repository for indexing and refresh its local index. |
+| `codebase_search` | Search indexed paths, symbols, and chunks. |
+| `codebase_context` | Get a compact read-first context package for a path, symbol, or query. |
 
 ## Commands
 
-- `/codebase-status` (`--full` for stale-index counts)
-- `/codebase-index --approve-repo`
-- `/codebase-search <query>`
-- `/codebase-context <path-or-symbol>`
+| Command | Use it for |
+| --- | --- |
+| `/codebase-status` | Show cheap approval/index diagnostics. |
+| `/codebase-status --full` | Show exact changed/missing/deleted stale-index diagnostics. |
+| `/codebase-index --approve-repo` | Approve and index the current Git repository. |
+| `/codebase-search <query>` | Search the local index. |
+| `/codebase-context <path-or-symbol>` | Show compact read-first context. |
 
-## Safety model
+## Install
 
-Indexing is local-only and limited to the current Git repository. First indexing requires explicit approval via `approveRepo: true` or `/codebase-index --approve-repo`. Symlinks, secret-like files, binary/generated files, and common heavy directories are skipped.
-
-Search and context tools are warn-only when the index is stale: they surface changed/missing/deleted counts but do not silently mutate the repository index. Refresh explicitly with `codebase_index` or `/codebase-index`.
-
-`codebase_status` is intentionally cheap by default for agent startup/status checks: it reports approval, DB counts, and last-index metadata without hashing the whole repo. Use `codebase_status({ full: true })` or `/codebase-status --full` when you need exact changed/missing/deleted diagnostics.
-
-## Lightweight checks
-
-Code-search is kept lightweight by avoiding runtime dependencies, bounding file sizes/results/snippets, skipping generated/heavy/secret-like inputs, and storing only local SQLite indexes. Run:
+From a local clone:
 
 ```bash
-npm run audit:lightweight
+cd /absolute/path/to/pi-ext-code-search
+pi install .
 ```
 
-The audit verifies there are no runtime dependencies, the Pi extension entry exists, tracked files do not include local indexes or obvious secrets, the package tarball remains small, and typecheck/tests pass.
+Upgrade an existing local install:
 
-## Development
+```bash
+cd /absolute/path/to/pi-ext-code-search
+git pull
+pi update .
+```
+
+If `pi update .` is not available for your install source, run `pi install .` again after pulling.
+
+## First use
+
+Indexing requires explicit per-repository approval:
+
+```text
+/codebase-index --approve-repo
+```
+
+After that, use `codebase_search`, `codebase_context`, or the matching slash commands. Refresh the index explicitly after code changes when stale warnings matter.
+
+## Quick checks
 
 ```bash
 npm install
 npm run typecheck
 npm test
 npm run audit:lightweight
-pi -e .
 ```
 
-Indexes are stored under `~/.pi/agent/code-search/`.
+## License
+
+MIT, as declared in `package.json`.
