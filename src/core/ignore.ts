@@ -4,7 +4,20 @@ import { join } from "node:path";
 const ignoredDirs = new Set([
   ".git", "node_modules", "dist", "build", "target", ".next", "coverage", "vendor", ".turbo", ".cache", ".idea", ".vscode", ".pi/npm", ".pi/git",
 ]);
-const ignoredFiles = [/\.lock$/i, /\.min\.js$/i, /\.png$/i, /\.jpe?g$/i, /\.gif$/i, /\.webp$/i, /\.pdf$/i, /\.zip$/i, /\.sqlite(-wal|-shm)?$/i];
+const ignoredFiles = [
+  /\.lock$/i,
+  /^(?:package-lock|npm-shrinkwrap)\.json$/i,
+  /^pnpm-lock\.ya?ml$/i,
+  /^yarn\.lock$/i,
+  /\.min\.js$/i,
+  /\.png$/i,
+  /\.jpe?g$/i,
+  /\.gif$/i,
+  /\.webp$/i,
+  /\.pdf$/i,
+  /\.zip$/i,
+  /\.sqlite(?:-wal|-shm)?$/i,
+];
 const secretish = [/^\.env($|\.)/, /secret/i, /private[-_]?key/i];
 
 export interface IgnoreRules {
