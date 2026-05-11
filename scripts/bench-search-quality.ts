@@ -33,10 +33,12 @@ interface Metrics {
   cases: number;
   top1Accuracy: number;
   recallAt5: number;
+  expectedCoverageAt5: number;
   mrrAt5: number;
   avgLatencyMs: number;
   p95LatencyMs: number;
   misses: Array<{ query: string; expectedPaths: string[]; actual: string[] }>;
+  partialMisses: Array<{ query: string; expectedPaths: string[]; missingExpectedPaths: string[]; actual: string[] }>;
 }
 
 const defaultRoots = [
@@ -51,6 +53,7 @@ if (roots.length === 0) {
   process.exit(2);
 }
 
+const ignoredStructuralNames = new Set(["main"]);
 const astGrepAvailable = hasAstGrep();
 const reports: RepoReport[] = [];
 for (const rootArg of roots) {
@@ -59,7 +62,7 @@ for (const rootArg of roots) {
   const pathPrefix = relative(info.root, root).split("\\").join("/");
   const indexed = indexRepo({ cwd: root, approve: true, pathPrefix });
   const symbols = astGrepAvailable ? astGrepSymbols(root, indexed.root).slice(0, 50) : [];
-  const structuralCases = symbols.map((hit) => ({ query: hit.name, expectedPaths: [hit.path] }));
+  const structuralCases = groupedSymbolCases(symbols);
   const naturalCases = naturalCasesFor(root, indexed.root);
   reports.push({
     root,
@@ -119,7 +122,7 @@ function naturalCasesFor(searchRoot: string, indexRoot: string): SearchCase[] {
   if (lower.includes("macrolens")) {
     return toCases([
       { query: "declarative macro signal rules thresholds inputs", expectedPath: "apps/web/src/lib/macro-signal-rules.ts" },
-      { query: "derived RSI consensus divergences history", expectedPath: "apps/web/src/lib/macro-derivations.ts" },
+      { query: "derived RSI consensus divergences history", expectedPath: "apps/web/src/lib/series-analysis.ts" },
       { query: "GET api newsletter macro snapshot endpoint", expectedPath: "apps/web/src/app/api/newsletter/macro/route.ts" },
       { query: "MacroLens newsletter macro data integration plan", expectedPath: "docs/plans/20260502-newsletter-macro-data-integration.md" },
     ]);
@@ -139,26 +142,35 @@ function naturalCasesFor(searchRoot: string, indexRoot: string): SearchCase[] {
       { query: "where are agent instructions?", expectedPath: "program.md" },
       { query: "what file should the agent edit?", expectedPaths: ["README.md", "program.md", "train.py"] },
       { query: "what should not be modified?", expectedPaths: ["README.md", "prepare.py"] },
+      { query: "where is the main implementation?", expectedPath: "train.py" },
       { query: "where is validation metric computed?", expectedPath: "prepare.py" },
+      { query: "where is validation metric used?", expectedPath: "train.py" },
       { query: "where is model architecture defined?", expectedPath: "train.py" },
+      { query: "where is data preparation?", expectedPath: "prepare.py" },
+      { query: "where are dependencies declared?", expectedPath: "pyproject.toml" },
     ]);
   }
   return [];
 }
 
 function scoreCases(root: string, cases: SearchCase[], pathPrefix = ""): Metrics {
-  if (cases.length === 0) return { cases: 0, top1Accuracy: 0, recallAt5: 0, mrrAt5: 0, avgLatencyMs: 0, p95LatencyMs: 0, misses: [] };
+  if (cases.length === 0) return { cases: 0, top1Accuracy: 0, recallAt5: 0, expectedCoverageAt5: 0, mrrAt5: 0, avgLatencyMs: 0, p95LatencyMs: 0, misses: [], partialMisses: [] };
   let top1 = 0;
   let recall5 = 0;
+  let expectedCoverage5 = 0;
   let reciprocalRankSum = 0;
   const latencies: number[] = [];
   const misses: Metrics["misses"] = [];
+  const partialMisses: Metrics["partialMisses"] = [];
 
   for (const item of cases) {
     const start = performance.now();
     const results = searchCodeMap({ cwd: root, query: item.query, limit: 5, pathPrefix });
     latencies.push(performance.now() - start);
     const paths = [...new Set(results.map((result) => result.path))];
+    const matchedExpectedPaths = item.expectedPaths.filter((path) => paths.includes(path));
+    const missingExpectedPaths = item.expectedPaths.filter((path) => !paths.includes(path));
+    expectedCoverage5 += matchedExpectedPaths.length / item.expectedPaths.length;
     const rank = paths.findIndex((path) => item.expectedPaths.includes(path));
     if (rank === 0) top1++;
     if (rank >= 0) {
@@ -167,6 +179,9 @@ function scoreCases(root: string, cases: SearchCase[], pathPrefix = ""): Metrics
     } else {
       misses.push({ query: item.query, expectedPaths: item.expectedPaths, actual: paths });
     }
+    if (missingExpectedPaths.length > 0) {
+      partialMisses.push({ query: item.query, expectedPaths: item.expectedPaths, missingExpectedPaths, actual: paths });
+    }
   }
 
   latencies.sort((a, b) => a - b);
@@ -174,11 +189,24 @@ function scoreCases(root: string, cases: SearchCase[], pathPrefix = ""): Metrics
     cases: cases.length,
     top1Accuracy: round(top1 / cases.length),
     recallAt5: round(recall5 / cases.length),
+    expectedCoverageAt5: round(expectedCoverage5 / cases.length),
     mrrAt5: round(reciprocalRankSum / cases.length),
     avgLatencyMs: round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length),
     p95LatencyMs: round(latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95))] ?? 0),
     misses,
+    partialMisses,
   };
+}
+
+function groupedSymbolCases(hits: GroundTruthHit[]): SearchCase[] {
+  const byName = new Map<string, Set<string>>();
+  for (const hit of hits) {
+    if (ignoredStructuralNames.has(hit.name)) continue;
+    const paths = byName.get(hit.name) ?? new Set<string>();
+    paths.add(hit.path);
+    byName.set(hit.name, paths);
+  }
+  return [...byName.entries()].map(([query, paths]) => ({ query, expectedPaths: [...paths] }));
 }
 
 function dedupeHits(hits: GroundTruthHit[]): GroundTruthHit[] {

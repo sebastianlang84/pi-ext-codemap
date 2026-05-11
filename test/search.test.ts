@@ -49,6 +49,10 @@ class DeliveryClient:
     def send_telegram(self, text: str) -> None:
         return None
 `);
+  writeFileSync(join(root, "train.py"), `
+def run_experiment():
+    return "ok"
+`);
   writeFileSync(join(root, "docs", "ops.md"), `
 # Operations
 
@@ -95,6 +99,13 @@ test("path-like queries return file matches first", (t) => {
   const root = fixtureRepo(t);
   const results = searchCodeMap({ cwd: root, query: "tools.ts", limit: 5 });
   assert.equal(results[0]?.path, "src/pi-extension/tools.ts");
+  assert.equal(results[0]?.kind, "file");
+});
+
+test("role-intent queries can surface main implementation files without lexical hits", (t) => {
+  const root = fixtureRepo(t);
+  const results = searchCodeMap({ cwd: root, query: "where is the main implementation?", limit: 5 });
+  assert.equal(results[0]?.path, "train.py");
   assert.equal(results[0]?.kind, "file");
 });
 

@@ -95,6 +95,19 @@ export function searchCodeMap(options: { query: string; cwd?: string; limit?: nu
       results.push(...pathRows.map((row) => toResult(row, plan, 30)));
     }
 
+    if (plan.roleIntents.length > 0) {
+      const roleRows = db.prepare(`
+        select path, language, 1 as startLine, 1 as endLine, 'file' as kind, path as text, 0 as rank, null as symbolName
+        from files
+        where path like ? escape '\\'
+        order by length(path), path
+        limit 500
+      `).all(pathFilter) as unknown as SearchRow[];
+      results.push(...roleRows
+        .filter((row) => fileRoleBoost(fileRoles(row.path.toLowerCase()), plan.roleIntents) > 0)
+        .map((row) => toResult(row, plan, 18)));
+    }
+
     for (const ftsQuery of plan.ftsQueries) {
       const remaining = Math.max(limit * 2 - results.length, limit);
       const chunkRows = db.prepare(`
@@ -224,15 +237,18 @@ function inferRoleIntents(normalized: string, terms: string[]): string[] {
   const has = (...needles: string[]) => needles.some((needle) => terms.includes(needle) || normalized.includes(needle));
   if (has("what is this project", "project about", "overview", "purpose")) intents.push("overview");
   if (has("agent", "instructions", "program")) intents.push("agent_instructions");
-  if (has("implemented", "implementation", "defined", "architecture", "model", "metric", "computed", "validation", "edit")) intents.push("implementation", "implementation/main");
-  if (has("data", "setup", "preparation", "prepare", "metric", "validation")) intents.push("setup/utility");
+  if (has("edit")) intents.push("overview", "agent_instructions", "implementation/main");
+  if (has("implemented", "implementation", "main", "defined", "architecture", "model", "used", "orchestrator", "pipeline", "run")) intents.push("implementation", "implementation/main");
+  if (has("computed")) intents.push("setup/utility");
+  if (has("data", "setup", "preparation", "prepare")) intents.push("setup/utility");
   if (has("not be modified", "not modified", "do not modify")) intents.push("overview", "setup/utility");
   if (has("dependencies", "dependency", "package", "pyproject")) intents.push("dependencies");
   return uniqueStrings(intents);
 }
 
 function fileRoleBoost(roles: string[], intents: string[]): number {
-  if (roles.some((role) => role === "setup/utility" && intents.includes(role))) return 22;
+  if (roles.includes("implementation/main") && intents.includes("implementation/main")) return 24;
+  if (roles.includes("setup/utility") && intents.includes("setup/utility")) return 22;
   return roles.some((role) => intents.includes(role)) ? 15 : 0;
 }
 
