@@ -18,6 +18,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test test/*.test.ts",
+    "bench:search-quality": "node --experimental-strip-types scripts/bench-search-quality.ts",
     "audit:lightweight": "node scripts/audit.mjs"
   },
   "peerDependencies": {

@@ -1,15 +1,16 @@
 import { openRepoDb } from "./db.ts";
 import { getRepoInfo, approveRepo } from "./repo.ts";
-import { scanRepo } from "./scanner.ts";
+import { normalizePathPrefix, scanRepo } from "./scanner.ts";
 import { chunkText } from "./chunker.ts";
 import { extractSymbols } from "./symbols.ts";
 import type { IndexStats } from "./types.ts";
 
-export function indexRepo(options: { cwd?: string; approve?: boolean } = {}): IndexStats & { dbPath: string; root: string } {
+export function indexRepo(options: { cwd?: string; approve?: boolean; pathPrefix?: string } = {}): IndexStats & { dbPath: string; root: string; pathPrefix: string } {
   const info = options.approve ? approveRepo(options.cwd, "codemap_index") : getRepoInfo(options.cwd);
   if (!info.approved) throw new Error("Repository is not approved. Run codemap_index with approveRepo: true first.");
+  const pathPrefix = normalizePathPrefix(options.pathPrefix);
   const db = openRepoDb(info.dbPath);
-  const scan = scanRepo(info.root);
+  const scan = scanRepo(info.root, { pathPrefix });
   const seen = new Set<string>();
   let indexed = 0;
 
@@ -52,6 +53,7 @@ export function indexRepo(options: { cwd?: string; approve?: boolean } = {}): In
     const rows = db.prepare("select path from files").all() as Array<{ path: string }>;
     let removed = 0;
     for (const row of rows) {
+      if (pathPrefix && !row.path.startsWith(pathPrefix)) continue;
       if (!seen.has(row.path)) {
         db.prepare("delete from chunks_fts where path=?").run(row.path);
         db.prepare("delete from symbols_fts where path=?").run(row.path);
@@ -61,7 +63,7 @@ export function indexRepo(options: { cwd?: string; approve?: boolean } = {}): In
     }
     db.prepare("insert or replace into meta(key, value) values ('last_indexed_at', ?)").run(new Date().toISOString());
     db.exec("commit");
-    return { scanned: scan.files.length, indexed, skipped: scan.skipped, skippedReasons: scan.skippedReasons, removed, warnings: scan.warnings, dbPath: info.dbPath, root: info.root };
+    return { scanned: scan.files.length, indexed, skipped: scan.skipped, skippedReasons: scan.skippedReasons, removed, warnings: scan.warnings, dbPath: info.dbPath, root: info.root, pathPrefix };
   } catch (error) {
     try { db.exec("rollback"); } catch { /* already closed or not in transaction */ }
     throw error;
@@ -70,29 +72,38 @@ export function indexRepo(options: { cwd?: string; approve?: boolean } = {}): In
   }
 }
 
-export function status(cwd = process.cwd(), options: { health?: "cheap" | "full" } = {}) {
+export function status(cwd = process.cwd(), options: { health?: "cheap" | "full"; pathPrefix?: string } = {}) {
   const healthMode = options.health ?? "cheap";
+  const pathPrefix = normalizePathPrefix(options.pathPrefix);
   const info = getRepoInfo(cwd);
   if (!info.approved) {
     return { ...info, indexed: false, files: 0, chunks: 0, symbols: 0, lastIndexedAt: null, health: healthMode, stale: false, changed: 0, missing: 0, deleted: 0, warnings: [] };
   }
   const db = openRepoDb(info.dbPath);
   try {
-    const files = (db.prepare("select count(*) as n from files").get() as { n: number }).n;
-    const chunks = (db.prepare("select count(*) as n from chunks").get() as { n: number }).n;
-    const symbols = (db.prepare("select count(*) as n from symbols").get() as { n: number }).n;
+    const files = pathPrefix
+      ? (db.prepare("select count(*) as n from files where path like ?").get(`${pathPrefix}%`) as { n: number }).n
+      : (db.prepare("select count(*) as n from files").get() as { n: number }).n;
+    const chunks = pathPrefix
+      ? (db.prepare("select count(*) as n from chunks join files f on f.id = chunks.file_id where f.path like ?").get(`${pathPrefix}%`) as { n: number }).n
+      : (db.prepare("select count(*) as n from chunks").get() as { n: number }).n;
+    const symbols = pathPrefix
+      ? (db.prepare("select count(*) as n from symbols join files f on f.id = symbols.file_id where f.path like ?").get(`${pathPrefix}%`) as { n: number }).n
+      : (db.prepare("select count(*) as n from symbols").get() as { n: number }).n;
     const lastIndexedAt = (db.prepare("select value from meta where key='last_indexed_at'").get() as { value: string } | undefined)?.value ?? null;
-    const base = { ...info, indexed: files > 0, files, chunks, symbols, lastIndexedAt, health: healthMode };
+    const base = { ...info, indexed: files > 0, files, chunks, symbols, lastIndexedAt, health: healthMode, pathPrefix };
     if (healthMode === "cheap") return { ...base, stale: false, changed: 0, missing: 0, deleted: 0, warnings: [] };
-    return { ...base, ...indexHealth(db, info.root) };
+    return { ...base, ...indexHealth(db, info.root, pathPrefix) };
   } finally {
     db.close();
   }
 }
 
-function indexHealth(db: ReturnType<typeof openRepoDb>, root: string) {
-  const scan = scanRepo(root);
-  const rows = db.prepare("select path, hash from files").all() as Array<{ path: string; hash: string }>;
+function indexHealth(db: ReturnType<typeof openRepoDb>, root: string, pathPrefix = "") {
+  const scan = scanRepo(root, { pathPrefix });
+  const rows = (pathPrefix
+    ? db.prepare("select path, hash from files where path like ?").all(`${pathPrefix}%`)
+    : db.prepare("select path, hash from files").all()) as Array<{ path: string; hash: string }>;
   const indexed = new Map(rows.map((row) => [row.path, row.hash]));
   const current = new Map(scan.files.map((file) => [file.relPath, file.hash]));
   let changed = 0;

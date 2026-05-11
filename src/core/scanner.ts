@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { relative, join } from "node:path";
+import { relative, join, resolve } from "node:path";
 import { loadIgnoreRules, shouldSkip } from "./ignore.ts";
 
 export interface ScannedFile {
@@ -25,8 +25,9 @@ const textExtensions = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".md", ".mdx", ".txt", ".yml", ".yaml", ".toml", ".sql", ".css", ".scss", ".html", ".py", ".go", ".rs", ".java", ".kt", ".sh", ".bash", ".zsh", ".rb", ".php", ".c", ".h", ".cpp", ".hpp",
 ]);
 
-export function scanRepo(root: string): ScanResult {
+export function scanRepo(root: string, options: { pathPrefix?: string } = {}): ScanResult {
   const rules = loadIgnoreRules(root);
+  const prefix = normalizePathPrefix(options.pathPrefix);
   const files: ScannedFile[] = [];
   const warnings: string[] = [];
   let skipped = 0;
@@ -65,8 +66,24 @@ export function scanRepo(root: string): ScanResult {
     }
   }
 
-  try { walk(root); } catch (error) { warnings.push(String(error)); }
+  try {
+    if (prefix) {
+      const repoRoot = resolve(root);
+      const scopedRoot = resolve(root, prefix);
+      if (scopedRoot !== repoRoot && !scopedRoot.startsWith(`${repoRoot}/`)) warnings.push(`Invalid pathPrefix outside repository: ${options.pathPrefix}`);
+      else walk(scopedRoot);
+    } else {
+      walk(root);
+    }
+  } catch (error) { warnings.push(String(error)); }
   return { files, skipped, skippedReasons, warnings };
+}
+
+export function normalizePathPrefix(pathPrefix?: string): string {
+  if (!pathPrefix) return "";
+  const normalized = pathPrefix.trim().replace(/^\.\/?/, "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (!normalized || normalized === ".") return "";
+  return `${normalized}/`;
 }
 
 export function detectLanguage(path: string): string {

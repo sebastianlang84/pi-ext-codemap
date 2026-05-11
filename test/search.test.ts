@@ -179,6 +179,56 @@ test("safety skips secrets, generated files, heavy directories, binary files, la
   if (existsSync(join(root, "linked.ts"))) assert.ok((result.skippedReasons.symlink ?? 0) >= 1);
 });
 
+test("codemapignore and expanded default ignores suppress dependency/cache noise", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-ignore-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src"), { recursive: true });
+  mkdirSync(join(root, ".venv", "lib", "python3.14", "site-packages"), { recursive: true });
+  mkdirSync(join(root, ".pytest_cache"), { recursive: true });
+  mkdirSync(join(root, "generated"), { recursive: true });
+
+  writeFileSync(join(root, ".codemapignore"), "generated/\n*.fixture.ts\n");
+  writeFileSync(join(root, "src", "allowed.ts"), "export const durableSourceNeedle = true;\n");
+  writeFileSync(join(root, ".venv", "lib", "python3.14", "site-packages", "dep.py"), "dependencyNoiseNeedle = True\n");
+  writeFileSync(join(root, ".pytest_cache", "cache.txt"), "dependencyNoiseNeedle\n");
+  writeFileSync(join(root, "generated", "out.ts"), "export const dependencyNoiseNeedle = true;\n");
+  writeFileSync(join(root, "src", "ignored.fixture.ts"), "export const dependencyNoiseNeedle = true;\n");
+
+  const result = indexRepo({ cwd: root, approve: true });
+  assert.equal(searchCodeMap({ cwd: root, query: "durableSourceNeedle", limit: 5 })[0]?.path, "src/allowed.ts");
+  assert.deepEqual(searchCodeMap({ cwd: root, query: "dependencyNoiseNeedle", limit: 5 }), []);
+  assert.ok((result.skippedReasons["ignored directory"] ?? 0) >= 2);
+  assert.ok((result.skippedReasons[".codemapignore"] ?? 0) >= 2);
+});
+
+test("pathPrefix scopes indexing, status, search, context, and deletions", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-scope-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "services", "api"), { recursive: true });
+  mkdirSync(join(root, "services", "web"), { recursive: true });
+
+  writeFileSync(join(root, "services", "api", "handler.ts"), "export function apiOnlyNeedle() { return true; }\n");
+  writeFileSync(join(root, "services", "web", "handler.ts"), "export function webOnlyNeedle() { return true; }\n");
+
+  const scoped = indexRepo({ cwd: root, approve: true, pathPrefix: "services/api" });
+  assert.equal(scoped.pathPrefix, "services/api/");
+  assert.equal(scoped.scanned, 1);
+  assert.equal(searchCodeMap({ cwd: root, query: "apiOnlyNeedle", limit: 5 })[0]?.path, "services/api/handler.ts");
+  assert.deepEqual(searchCodeMap({ cwd: root, query: "webOnlyNeedle", limit: 5 }), []);
+  assert.deepEqual(searchCodeMap({ cwd: root, query: "apiOnlyNeedle", pathPrefix: "services/web", limit: 5 }), []);
+  assert.equal(status(root, { health: "full", pathPrefix: "services/api" }).files, 1);
+  assert.equal((codemapContext({ cwd: root, target: "handler.ts", pathPrefix: "services/api" }).readFirst[0] as { path: string }).path, "services/api/handler.ts");
+
+  indexRepo({ cwd: root });
+  assert.equal(searchCodeMap({ cwd: root, query: "webOnlyNeedle", limit: 5 })[0]?.path, "services/web/handler.ts");
+  unlinkSync(join(root, "services", "api", "handler.ts"));
+  const refreshed = indexRepo({ cwd: root, pathPrefix: "services/api" });
+  assert.equal(refreshed.removed, 1);
+  assert.equal(searchCodeMap({ cwd: root, query: "webOnlyNeedle", limit: 5 })[0]?.path, "services/web/handler.ts");
+});
+
 test("index refreshes only changed files and removes deleted files", (t) => {
   const root = fixtureRepo(t);
   assert.equal(indexRepo({ cwd: root }).indexed, 0);

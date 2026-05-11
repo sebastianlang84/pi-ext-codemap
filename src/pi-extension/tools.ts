@@ -83,9 +83,10 @@ export function registerCodeMapTools(pi: ExtensionAPI): void {
     description: "Show CodeMap approval and local SQLite index status for the current Git repository. Uses cheap diagnostics unless full=true.",
     parameters: Type.Object({
       full: Type.Optional(Type.Boolean({ description: "Run a full repository scan to report stale index diagnostics." })),
+      pathPrefix: Type.Optional(Type.String({ description: "Limit diagnostics to an indexed subtree, e.g. services/api/." })),
     }),
-    async execute(_id: string, params: { full?: boolean }) {
-      return textResult(status(process.cwd(), { health: params.full === true ? "full" : "cheap" }));
+    async execute(_id: string, params: { full?: boolean; pathPrefix?: string }) {
+      return textResult(status(process.cwd(), { health: params.full === true ? "full" : "cheap", pathPrefix: params.pathPrefix }));
     },
     renderResult: renderCodeMapResult,
   };
@@ -95,9 +96,10 @@ export function registerCodeMapTools(pi: ExtensionAPI): void {
     description: "Index or refresh the current Git repository for CodeMap. Requires approveRepo=true the first time.",
     parameters: Type.Object({
       approveRepo: Type.Optional(Type.Boolean({ description: "Approve this Git repository for local-only indexing." })),
+      pathPrefix: Type.Optional(Type.String({ description: "Only index/refresh this repository subtree, e.g. services/api/." })),
     }),
-    async execute(_id: string, params: { approveRepo?: boolean }) {
-      return textResult(indexRepo({ cwd: process.cwd(), approve: params.approveRepo === true }));
+    async execute(_id: string, params: { approveRepo?: boolean; pathPrefix?: string }) {
+      return textResult(indexRepo({ cwd: process.cwd(), approve: params.approveRepo === true, pathPrefix: params.pathPrefix }));
     },
     renderResult: renderCodeMapResult,
   };
@@ -108,9 +110,10 @@ export function registerCodeMapTools(pi: ExtensionAPI): void {
     parameters: Type.Object({
       query: Type.String({ description: "Feature, symbol, path, or phrase to search for." }),
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50, description: "Maximum result count." })),
+      pathPrefix: Type.Optional(Type.String({ description: "Limit results to an indexed subtree, e.g. services/api/." })),
     }),
-    async execute(_id: string, params: { query: string; limit?: number }) {
-      return textResult(searchCodeMapWithDiagnostics({ query: params.query, limit: params.limit, cwd: process.cwd() }));
+    async execute(_id: string, params: { query: string; limit?: number; pathPrefix?: string }) {
+      return textResult(searchCodeMapWithDiagnostics({ query: params.query, limit: params.limit, cwd: process.cwd(), pathPrefix: params.pathPrefix }));
     },
     renderResult: renderCodeMapResult,
   };
@@ -121,9 +124,10 @@ export function registerCodeMapTools(pi: ExtensionAPI): void {
     parameters: Type.Object({
       target: Type.String({ description: "Indexed file path, symbol, subsystem, or phrase." }),
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 25, description: "Maximum read-first items." })),
+      pathPrefix: Type.Optional(Type.String({ description: "Limit lookup to an indexed subtree, e.g. services/api/." })),
     }),
-    async execute(_id: string, params: { target: string; limit?: number }) {
-      return textResult(codemapContext({ target: params.target, limit: params.limit, cwd: process.cwd() }));
+    async execute(_id: string, params: { target: string; limit?: number; pathPrefix?: string }) {
+      return textResult(codemapContext({ target: params.target, limit: params.limit, cwd: process.cwd(), pathPrefix: params.pathPrefix }));
     },
     renderResult: renderCodeMapResult,
   };
