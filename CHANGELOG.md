@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 - 2026-05-11
+
+- Align status bar symbols with pi-ext-memory convention: `✓` / `✗` instead of plain text.
+
 ## 0.2.1 - 2026-05-09
 
 - Improve the README for faster human overview, tool discovery, install/upgrade, and first-use guidance.

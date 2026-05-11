@@ -3,8 +3,8 @@ import { registerCodeSearchTools } from "./tools.ts";
 import { registerCodeSearchCommands } from "./commands.ts";
 
 const STATUS_KEY = "code-search";
-const STATUS_OK_TEXT = "code-search ok";
-const STATUS_ERROR_TEXT = "code-search fehler";
+const STATUS_OK_TEXT = "code-search ✓";
+const STATUS_ERROR_TEXT = "code-search ✗";
 
 export default function codeSearchExtension(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {

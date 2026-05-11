@@ -1,6 +1,6 @@
 {
   "name": "pi-ext-code-search",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Local SQLite/FTS codebase search and context tools for Pi coding agents.",
   "type": "module",
   "keywords": [
