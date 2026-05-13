@@ -1,22 +1,45 @@
 # CodeMap
 
-CodeMap is a local SQLite/FTS codebase index for Pi coding agents. It indexes a Git repository and provides fast path, symbol, and source-chunk lookup without sending code to a remote service.
+CodeMap is a local SQLite/FTS codebase index for Pi coding agents. It helps an agent quickly find relevant files, symbols, chunks, tests, and docs before reading or editing a repository.
 
-## How indexing works
+It complements `pi-memory`:
 
-CodeMap does not build embeddings or use a vector database. After a repository is explicitly approved, it walks the current Git repository and stores a local SQLite database under `~/.pi/agent/state/codemap/`.
+```text
+pi-memory stores durable decisions and handoffs.
+CodeMap indexes the current repo state and can be rebuilt.
+```
 
-During the scan it:
+## What CodeMap does
 
-- skips symlinks, binary-looking files, secret-like files such as `.env`, common generated/vendor/cache directories such as `.git`, `node_modules`, `dist`, `build`, `coverage`, `.venv`, `site-packages`, `__pycache__`, and matching `.gitignore`/`.codemapignore` entries;
-- only indexes supported text extensions such as TypeScript/JavaScript, Markdown, JSON/YAML, SQL, CSS/HTML, Python, Go, Rust, Java, shell, C/C++, and similar source files;
+After explicit approval, CodeMap indexes the current Git repository into a local SQLite database under `~/.pi/agent/state/codemap/`. Repository content is not sent to a remote service.
+
+During indexing it:
+
+- respects `.gitignore` and optional `.codemapignore` rules;
+- skips symlinks, binary-looking files, secret-like files such as `.env`, and generated/vendor/cache folders such as `.git`, `node_modules`, `dist`, `build`, `coverage`, `.venv`, `site-packages`, and `__pycache__`;
+- indexes supported source/text extensions such as TypeScript/JavaScript, Markdown, JSON/YAML, SQL, CSS/HTML, Python, Go, Rust, Java, shell, C/C++, and similar files;
 - skips files larger than 1 MB or containing NUL bytes;
-- records each file's relative path, language, size, SHA-256 hash, and mtime so unchanged files can be skipped on later runs;
-- splits source files into overlapping 80-line chunks and Markdown files by headings;
-- extracts lightweight symbols with regexes: TypeScript/JavaScript classes, functions, const arrow functions, interfaces, types, methods, and Markdown headings;
-- writes chunks and symbols into SQLite FTS5 tables for full-text lookup.
+- stores each file's path, language, size, SHA-256 hash, and mtime;
+- chunks source files into overlapping line ranges and Markdown files by headings;
+- extracts cheap symbols such as TypeScript/JavaScript classes, functions, const arrow functions, interfaces, types, methods, and Markdown headings;
+- writes paths, chunks, and symbols into SQLite FTS5 tables.
 
-Re-indexing is incremental: unchanged files are left alone, changed files have their chunks and symbols refreshed, and deleted files are removed from the index. `pathPrefix` can scope indexing, status, search, and context to a repository subtree for monorepos or nested services. Search combines path matches, FTS/BM25 rank, exact text/path matches, and symbol boosts; `codemap_context` returns either the first chunks of an indexed file or falls back to search results, plus simple related test/doc path hints.
+Re-indexing is incremental: unchanged files are skipped, changed files are refreshed, and deleted files are removed. `pathPrefix` can scope indexing, status, search, and context to a subtree in monorepos.
+
+## What is possible in V1
+
+| Capability | Status |
+|---|---|
+| Approve and index the current Git repo locally | Implemented |
+| Search paths, chunks, and cheap symbols with SQLite FTS5 | Implemented |
+| Return line-bounded snippets with ranking scores | Implemented |
+| Return read-first context for a file, symbol, feature, or query | Implemented |
+| Warn when the index is stale | Implemented |
+| Provide simple related test/doc path hints | Implemented |
+| Deprecated `codebase_*` aliases for older workflows | Implemented |
+| Embeddings/vector search | Planned, not V1 |
+| ast-grep integration, callgraphs, graph expansion | Planned, not V1 |
+| Daemon/background watcher or remote service | Not a goal |
 
 ## Install
 
@@ -27,43 +50,73 @@ pi install git:github.com/sebastianlang84/pi-ext-codemap
 For local development:
 
 ```bash
-cd ~/dev/pi-extensions/pi-ext-codemap
+cd /path/to/pi-ext-codemap
 pi install .
 ```
 
-## Usage
+## Quick start
 
-Approve and index the current Git repository:
+Approve and index the current Git repository once:
 
 ```text
 /codemap-index --approve-repo
 ```
 
-Search or fetch compact read-first context:
+Check health before relying on old results:
 
 ```text
-/codemap-search <query>
-/codemap-context <path-or-symbol>
 /codemap-status --full
 ```
 
-For monorepos or nested services, pass `pathPrefix` to the tools or `--path-prefix <subtree>` to commands, for example:
+Find relevant files, symbols, or chunks:
 
 ```text
-/codemap-index --approve-repo --path-prefix services/newsletter-writer
-/codemap-search --path-prefix services/newsletter-writer telegram delivery
+/codemap-search memory handoff retrieval
+/codemap-search --path-prefix services/api auth middleware
 ```
+
+Get a compact read-first package before opening broader code:
+
+```text
+/codemap-context src/core/search.ts
+/codemap-context --path-prefix services/api auth middleware
+```
+
+## Commands and tools
+
+Pi commands are for humans in the TUI. LLM tools expose the same operations as structured JSON.
+
+| Operation | Command | Tool params | Result shape |
+|---|---|---|---|
+| Status | `/codemap-status [--full] [--path-prefix <subtree>]` | `codemap_status({ full?, pathPrefix? })` | repo approval, DB path, file/chunk/symbol counts, `lastIndexedAt`, stale diagnostics when `full=true` |
+| Index | `/codemap-index [--approve-repo] [--path-prefix <subtree>]` | `codemap_index({ approveRepo?, pathPrefix? })` | `scanned`, `indexed`, `skipped`, `removed`, `warnings`, `skippedReasons`, `root`, `dbPath` |
+| Search | `/codemap-search [--path-prefix <subtree>] <query>` | `codemap_search({ query, limit?, pathPrefix? })` | `results[]` with `path`, `language`, `startLine`, `endLine`, `kind`, `snippet`, `score`, plus stale warnings |
+| Context | `/codemap-context [--path-prefix <subtree>] <target>` | `codemap_context({ target, limit?, pathPrefix? })` | `readFirst[]`, `relatedTests[]`, `relatedDocs[]`, stale diagnostics, warnings |
+
+Use the tools this way:
+
+1. `codemap_status` when approval, index existence, or freshness is uncertain.
+2. `codemap_index` when the repo was explicitly approved or the index should be refreshed.
+3. `codemap_search` when the relevant file/symbol/subsystem is not known yet.
+4. `codemap_context` after finding a likely target, then read source files before editing.
 
 ## Compatibility
 
-Legacy `/codebase-*` commands and `codebase_*` tools are still registered as deprecated aliases. Prefer the primary CodeMap names:
+Legacy `/codebase-*` commands and `codebase_*` tools are still registered as deprecated aliases. Prefer:
 
 - `codemap_status`
 - `codemap_index`
 - `codemap_search`
 - `codemap_context`
 
-CodeMap stores indexes under `~/.pi/agent/state/codemap/` and non-destructively migrates existing `~/.pi/agent/codemap/` or `~/.pi/agent/code-search/` data when needed.
+CodeMap non-destructively migrates existing `~/.pi/agent/codemap/` or `~/.pi/agent/code-search/` data into `~/.pi/agent/state/codemap/` when needed.
+
+## Documentation map
+
+- [`PRD.md`](PRD.md) — product contract, safety rules, data model, and implementation decisions.
+- [`docs/roadmap.md`](docs/roadmap.md) — planned/non-V1 ideas.
+- [`docs/search-quality.md`](docs/search-quality.md) — maintainer notes for ranking/search-quality benchmark usage.
+- [`docs/archive/brainstorming.md`](docs/archive/brainstorming.md) — original historical brainstorming note, no longer authoritative.
 
 ## License
 

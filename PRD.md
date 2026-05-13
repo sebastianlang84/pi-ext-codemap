@@ -282,11 +282,13 @@ Files above the limit are skipped and counted in status output.
 Use local per-repo SQLite databases plus a global registry:
 
 ```text
-~/.pi/agent/codemap/
+~/.pi/agent/state/codemap/
   registry.sqlite
   repos/
     <repo-hash>.sqlite
 ```
+
+Existing legacy data from `~/.pi/agent/codemap/` or `~/.pi/agent/code-search/` may be migrated non-destructively into this state directory.
 
 Rationale:
 
@@ -301,84 +303,67 @@ Rationale:
 Use:
 
 ```text
-better-sqlite3 + raw SQL migrations
+Node.js node:sqlite DatabaseSync + raw SQL migrations
 ```
 
-Do not use Prisma.
+Do not use Prisma or an ORM.
 
-Core tables:
+Registry table:
 
 ```sql
 repos(
-  id,
-  root_path,
-  git_remote,
-  created_at,
-  updated_at
+  key text primary key,
+  root_path text not null unique,
+  git_remote text,
+  enabled integer not null,
+  approved_at text not null,
+  approval_source text not null,
+  updated_at text not null
 );
+```
+
+Per-repo index tables:
+
+```sql
+meta(key text primary key, value text not null);
 
 files(
-  id,
-  repo_id,
-  path,
-  basename,
-  language,
-  size,
-  hash,
-  mtime,
-  indexed_at
+  id integer primary key,
+  path text not null unique,
+  language text not null,
+  size integer not null,
+  hash text not null,
+  mtime_ms real not null,
+  indexed_at text not null
 );
 
 chunks(
-  id,
-  file_id,
-  ordinal,
-  start_line,
-  end_line,
-  kind,
-  text,
-  hash,
-  token_estimate
+  id integer primary key,
+  file_id integer not null references files(id) on delete cascade,
+  ordinal integer not null,
+  start_line integer not null,
+  end_line integer not null,
+  kind text not null,
+  text text not null,
+  unique(file_id, ordinal)
 );
 
 symbols(
-  id,
-  file_id,
-  name,
-  kind,
-  start_line,
-  end_line,
-  signature,
-  parent_symbol_id,
-  export_kind
-);
-
-index_runs(
-  id,
-  repo_id,
-  started_at,
-  finished_at,
-  status,
-  files_seen,
-  files_changed,
-  error
+  id integer primary key,
+  file_id integer not null references files(id) on delete cascade,
+  name text not null,
+  kind text not null,
+  start_line integer not null,
+  end_line integer,
+  signature text
 );
 ```
 
 FTS tables:
 
 ```sql
-files_fts(path, basename, language);
-symbols_fts(name, signature, kind);
-chunks_fts(text, path, language, kind);
-```
-
-Important constraints:
-
-```sql
-UNIQUE(repo_id, path);
-UNIQUE(file_id, ordinal);
-UNIQUE(file_id, name, kind, start_line);
+chunks_fts(path, language, kind, text);
+symbols_fts(path, name, kind, signature);
 ```
 
 ## 14. Tool API
@@ -387,27 +372,51 @@ UNIQUE(file_id, name, kind, start_line);
 
 Returns index health and repo approval state.
 
+Inputs:
+
+```ts
+{
+  full?: boolean;       // run full stale diagnostics when true
+  pathPrefix?: string;
+}
+```
+
 Output should include:
 
-- repo root
-- approved/enabled status
+- repo root, key, remote, and approval/enabled status
 - DB path
 - last index run
 - file/chunk/symbol counts
-- stale status
-- skipped file counts by reason
+- selected `pathPrefix`
+- stale/changed/missing/deleted diagnostics when `full=true`
+- skipped file counts by reason when full diagnostics scan the tree
 
 ### `codemap_index`
 
-Indexes or updates current repo.
+Indexes or updates current repo. First use requires explicit approval.
 
 Inputs:
 
 ```ts
 {
   approveRepo?: boolean;
-  force?: boolean;
-  policy?: "if_missing" | "if_stale" | "always";
+  pathPrefix?: string;
+}
+```
+
+Output includes:
+
+```ts
+{
+  scanned: number;
+  indexed: number;
+  skipped: number;
+  removed: number;
+  warnings: string[];
+  skippedReasons: Record<string, number>;
+  dbPath: string;
+  root: string;
+  pathPrefix: string;
 }
 ```
 
@@ -420,42 +429,47 @@ Inputs:
 ```ts
 {
   query: string;
-  limit?: number;
-  includeDocs?: boolean;
-  includeTests?: boolean;
+  limit?: number;      // 1..50, default 10
+  pathPrefix?: string;
 }
 ```
 
-Output item contract:
+Output package:
 
 ```ts
 {
-  path: string;
-  startLine: number;
-  endLine: number;
-  kind: "file" | "chunk" | "symbol" | "doc" | "test";
-  snippet: string;
-  score: number;
-  matchedBy: Array<"path" | "fts" | "symbol" | "heading">;
-  warnings?: string[];
+  query: string;
+  root: string;
+  pathPrefix: string;
+  lastIndexedAt: string | null;
+  stale: boolean;
+  changed: number;
+  missing: number;
+  deleted: number;
+  warnings: string[];
+  results: Array<{
+    path: string;
+    language: string;
+    startLine: number;
+    endLine: number;
+    kind: string;
+    snippet: string;
+    score: number;
+  }>;
 }
 ```
 
 ### `codemap_context`
 
-Builds compact context for a file, symbol, or query.
+Builds compact context for an indexed file path or falls back to search results for a symbol/query.
 
 Inputs:
 
 ```ts
 {
-  path?: string;
-  symbol?: string;
-  query?: string;
-  budgetLines?: number;
-  budgetChars?: number;
-  includeTests?: boolean;
-  includeDocs?: boolean;
+  target: string;
+  limit?: number;      // 1..25, default 8
+  pathPrefix?: string;
 }
 ```
 
@@ -463,9 +477,17 @@ Output:
 
 ```ts
 {
+  target: string;
+  root: string;
+  pathPrefix: string;
+  lastIndexedAt: string | null;
+  stale: boolean;
+  changed: number;
+  missing: number;
+  deleted: number;
   readFirst: ContextItem[];
-  relatedTests: ContextItem[];
-  relatedDocs: ContextItem[];
+  relatedTests: string[];
+  relatedDocs: string[];
   warnings: string[];
 }
 ```
@@ -485,51 +507,57 @@ Embeddings are not part of V1 ranking.
 
 ## 16. Commands
 
-Recommended commands:
+Commands:
 
 ```text
-/codemap-status
-/codemap-index
-/codemap-search <query>
-/codemap-context <path-or-symbol>
+/codemap-status [--full] [--path-prefix <subtree>]
+/codemap-index [--approve-repo] [--path-prefix <subtree>]
+/codemap-search [--path-prefix <subtree>] <query>
+/codemap-context [--path-prefix <subtree>] <path-or-symbol-or-query>
 ```
+
+Deprecated aliases remain registered for compatibility: `/codebase-status`, `/codebase-index`, `/codebase-search`, `/codebase-context` and the matching `codebase_*` tools.
 
 ## 17. Packaging
 
 The project should be packaged as a Pi extension/package.
 
-Recommended structure:
+Current structure:
 
 ```text
 pi-ext-codemap/
   README.md
   PRD.md
+  index.ts
   docs/
-    adr/
-      001-memory-vs-codemap.md
-      002-local-index-safety.md
+    roadmap.md
+    search-quality.md
+    archive/brainstorming.md
   migrations/
     001_init.sql
     002_fts.sql
   src/
     core/
-      db/
-        connection.ts
-        migrate.ts
-        queries.ts
-        searchSql.ts
-      scanner.ts
-      ignore.ts
       chunker.ts
-      indexer.ts
-      search.ts
-      ranking.ts
       context.ts
+      context-builder.ts
+      db.ts
+      ignore.ts
+      indexer.ts
+      index-store.ts
+      query-plan.ts
+      ranking.ts
+      repo.ts
+      scanner.ts
+      search.ts
+      search-quality-metrics.ts
       symbols.ts
+      types.ts
     pi-extension/
-      index.ts
-      tools.ts
       commands.ts
+      index.ts
+      operations.ts
+      tools.ts
   package.json
 ```
 
@@ -550,12 +578,12 @@ V1 is successful if:
 - Build a Pi extension/package with four V1 tools: status, index, search, and context.
 - Keep V1 local-only, on-demand, and explicitly approved per repository.
 - Use a global registry plus one SQLite database per approved repo.
-- Use `better-sqlite3` with raw SQL migrations; do not introduce Prisma.
+- Use Node.js `node:sqlite` `DatabaseSync` with raw SQL migrations; do not introduce Prisma or an ORM.
 - Use SQLite FTS5 as the primary V1 search engine across file paths, symbols, and chunks.
 - Keep indexing incremental with file hash/mtime checks and deleted-file cleanup.
 - Use whitelist-first scanning, `.gitignore` support, size limits, and conservative secret/binary/generated-file exclusions.
 - Do not follow symlinks in V1.
-- Chunk code, Markdown, and text into line-bounded ranges with stable ordinals and token estimates.
+- Chunk code, Markdown, and text into line-bounded ranges with stable ordinals.
 - Implement only cheap, reliable symbol extraction in V1; defer full AST/callgraph behavior.
 - Rank by exact path/name, symbol matches, FTS matches, docs/headings, test intent, and small recency boosts.
 - Return warnings instead of silently auto-refreshing stale indexes.
@@ -575,7 +603,7 @@ V1 is successful if:
 
 ## 21. MVP Build Order
 
-1. README + ADR-001
+1. README + product docs
 2. Package skeleton + Pi extension loads
 3. Registry + per-repo DB path handling
 4. SQLite schema + migrations
@@ -591,20 +619,21 @@ V1 is successful if:
 14. Tests/docs heuristics
 15. Optional V1.5 features
 
-## 22. Open Questions
+## 22. Resolved Defaults and Deferred Questions
 
-Before implementation:
+Resolved V1 defaults:
 
-- Exact Pi extension manifest shape.
-- Whether V1 exposes 4 tools or one `codebase` tool with actions.
-- Initial language whitelist details.
-- Exact chunk size and overlap defaults.
-- Whether stale index should auto-refresh for approved repos or only warn.
+- The package uses a `package.json` `pi.extensions` manifest pointing at `./index.ts`.
+- V1 exposes four primary tools: `codemap_status`, `codemap_index`, `codemap_search`, and `codemap_context`.
+- Deprecated `codebase_*` aliases remain available only for compatibility.
+- Indexing is manual/on-demand.
+- Stale search/context results warn instead of silently reindexing.
+- Symlinks are not followed.
+- Embeddings are not part of V1.
 
-Recommended defaults:
+Deferred questions:
 
-- 4 small tools for V1.
-- manual/on-demand indexing only.
-- stale search warns instead of silently reindexing.
-- no symlink following.
-- no embeddings in V1.
+- Which optional embedding adapter should be tried first?
+- How far should cheap symbol extraction go before using optional `ast-grep`?
+- Which graph/test/doc relationships are useful enough for V1.5/V2?
+- Should refresh automation be implemented as an explicit command, hook, or remain manual-only?
