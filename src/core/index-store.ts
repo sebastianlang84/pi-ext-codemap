@@ -3,6 +3,8 @@ import { openRepoDb } from "./db.ts";
 import { extractSymbols } from "./symbols.ts";
 import type { ScannedFile } from "./scanner.ts";
 
+const INDEX_VERSION = "3";
+
 export interface IndexStoreResult {
   indexed: number;
   removed: number;
@@ -12,11 +14,10 @@ export function applyIndexUpdate(options: {
   db: ReturnType<typeof openRepoDb>;
   files: ScannedFile[];
   pathPrefix: string;
-  indexVersionKey: string;
-  indexVersion: string;
-  forceReindex: boolean;
 }): IndexStoreResult {
-  const { db, files, pathPrefix, indexVersionKey, indexVersion, forceReindex } = options;
+  const { db, files, pathPrefix } = options;
+  const indexVersionKey = pathPrefix ? `index_version:${pathPrefix}` : "index_version";
+  const forceReindex = shouldForceReindex(db, indexVersionKey);
   const seen = new Set<string>();
   let indexed = 0;
 
@@ -26,10 +27,19 @@ export function applyIndexUpdate(options: {
     if (upsertIndexedFile(db, file, forceReindex)) indexed++;
   }
   const removed = removeDeletedFiles(db, seen, pathPrefix);
-  db.prepare("insert or replace into meta(key, value) values ('last_indexed_at', ?)").run(new Date().toISOString());
-  db.prepare("insert or replace into meta(key, value) values (?, ?)").run(indexVersionKey, indexVersion);
+  writeIndexMetadata(db, indexVersionKey);
   db.exec("commit");
   return { indexed, removed };
+}
+
+function shouldForceReindex(db: ReturnType<typeof openRepoDb>, indexVersionKey: string): boolean {
+  const storedIndexVersion = (db.prepare("select value from meta where key=?").get(indexVersionKey) as { value: string } | undefined)?.value;
+  return storedIndexVersion !== INDEX_VERSION;
+}
+
+function writeIndexMetadata(db: ReturnType<typeof openRepoDb>, indexVersionKey: string): void {
+  db.prepare("insert or replace into meta(key, value) values ('last_indexed_at', ?)").run(new Date().toISOString());
+  db.prepare("insert or replace into meta(key, value) values (?, ?)").run(indexVersionKey, INDEX_VERSION);
 }
 
 function upsertIndexedFile(db: ReturnType<typeof openRepoDb>, file: ScannedFile, forceReindex: boolean): boolean {

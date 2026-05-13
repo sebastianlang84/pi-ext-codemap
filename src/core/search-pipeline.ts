@@ -1,0 +1,90 @@
+import { fileRoleBoost, fileRoles, toResult, type SearchRow } from "./ranking.ts";
+import type { QueryPlan } from "./query-plan.ts";
+import type { SearchResult } from "./types.ts";
+import { openRepoDb } from "./db.ts";
+
+export interface SearchRetrievalRequest {
+  plan: QueryPlan;
+  limit: number;
+  pathFilter: string;
+}
+
+export function pathFilterForPrefix(pathPrefix: string): string {
+  return pathPrefix ? `${escapeLike(pathPrefix)}%` : "%";
+}
+
+export function collectSearchCandidates(db: ReturnType<typeof openRepoDb>, request: SearchRetrievalRequest): SearchResult[] {
+  const results: SearchResult[] = [];
+  results.push(...pathMatchCandidates(db, request));
+  results.push(...roleIntentCandidates(db, request));
+  for (const ftsQuery of request.plan.ftsQueries) {
+    const remaining = Math.max(request.limit * 2 - results.length, request.limit);
+    results.push(...symbolFtsCandidates(db, { ...request, ftsQuery, remaining }));
+    results.push(...chunkFtsCandidates(db, { ...request, ftsQuery, remaining }));
+  }
+  return results;
+}
+
+function pathMatchCandidates(db: ReturnType<typeof openRepoDb>, request: SearchRetrievalRequest): SearchResult[] {
+  if (!request.plan.pathLike) return [];
+  const rows = db.prepare(`
+    select path, language, 1 as startLine, 1 as endLine, 'file' as kind, path as text, 0 as rank, null as symbolName
+    from files
+    where lower(path) like ? escape '\\' and path like ? escape '\\'
+    order by length(path), path
+    limit ?
+  `).all(`%${escapeLike(request.plan.pathNeedle.toLowerCase())}%`, request.pathFilter, Math.min(request.limit, 20)) as unknown as SearchRow[];
+  return rows.map((row) => toResult(row, request.plan, 30));
+}
+
+function roleIntentCandidates(db: ReturnType<typeof openRepoDb>, request: SearchRetrievalRequest): SearchResult[] {
+  if (request.plan.roleIntents.length === 0) return [];
+  const rows = db.prepare(`
+    select path, language, 1 as startLine, 1 as endLine, 'file' as kind, path as text, 0 as rank, null as symbolName
+    from files
+    where path like ? escape '\\'
+    order by length(path), path
+    limit 500
+  `).all(request.pathFilter) as unknown as SearchRow[];
+  return rows
+    .filter((row) => fileRoleBoost(fileRoles(row.path.toLowerCase()), request.plan.roleIntents) > 0)
+    .map((row) => toResult(row, request.plan, 18));
+}
+
+function chunkFtsCandidates(
+  db: ReturnType<typeof openRepoDb>,
+  request: SearchRetrievalRequest & { ftsQuery: QueryPlan["ftsQueries"][number]; remaining: number },
+): SearchResult[] {
+  const rows = db.prepare(`
+    select f.path, f.language, c.start_line as startLine, c.end_line as endLine, c.kind, c.text,
+           bm25(chunks_fts) as rank, null as symbolName
+    from chunks_fts
+    join chunks c on c.id = chunks_fts.rowid
+    join files f on f.id = c.file_id
+    where chunks_fts match ? and f.path like ? escape '\\'
+    order by rank
+    limit ?
+  `).all(request.ftsQuery.query, request.pathFilter, request.remaining) as unknown as SearchRow[];
+  return rows.map((row) => toResult(row, request.plan, request.ftsQuery.tierBoost + 1));
+}
+
+function symbolFtsCandidates(
+  db: ReturnType<typeof openRepoDb>,
+  request: SearchRetrievalRequest & { ftsQuery: QueryPlan["ftsQueries"][number]; remaining: number },
+): SearchResult[] {
+  const rows = db.prepare(`
+    select f.path, f.language, s.start_line as startLine, coalesce(s.end_line, s.start_line) as endLine,
+           s.kind, coalesce(s.signature, s.name) as text, bm25(symbols_fts) as rank, s.name as symbolName
+    from symbols_fts
+    join symbols s on s.id = symbols_fts.rowid
+    join files f on f.id = s.file_id
+    where symbols_fts match ? and f.path like ? escape '\\'
+    order by rank
+    limit ?
+  `).all(request.ftsQuery.query, request.pathFilter, Math.ceil(request.remaining / 2)) as unknown as SearchRow[];
+  return rows.map((row) => toResult(row, request.plan, request.ftsQuery.tierBoost + 4));
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}

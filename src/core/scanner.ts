@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { relative, join, resolve } from "node:path";
-import { loadIgnoreRules, shouldSkip } from "./ignore.ts";
+import { createScanPolicy, detectLanguage } from "./scan-policy.ts";
+
+export { detectLanguage };
 
 export interface ScannedFile {
   absPath: string;
@@ -20,13 +22,8 @@ export interface ScanResult {
   warnings: string[];
 }
 
-const maxFileBytes = 1_000_000;
-const textExtensions = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".md", ".mdx", ".txt", ".yml", ".yaml", ".toml", ".sql", ".css", ".scss", ".html", ".py", ".go", ".rs", ".java", ".kt", ".sh", ".bash", ".zsh", ".rb", ".php", ".c", ".h", ".cpp", ".hpp",
-]);
-
 export function scanRepo(root: string, options: { pathPrefix?: string } = {}): ScanResult {
-  const rules = loadIgnoreRules(root);
+  const policy = createScanPolicy(root);
   const prefix = normalizePathPrefix(options.pathPrefix);
   const files: ScannedFile[] = [];
   const warnings: string[] = [];
@@ -42,22 +39,22 @@ export function scanRepo(root: string, options: { pathPrefix?: string } = {}): S
       const absPath = join(dir, entry.name);
       const relPath = relative(root, absPath).split("\\").join("/");
       if (entry.isSymbolicLink()) { skipOne("symlink"); continue; }
-      const skip = shouldSkip(relPath, entry.isDirectory(), rules);
-      if (skip) { skipOne(skip); continue; }
+      const entrySkip = policy.entrySkipReason(relPath, entry.isDirectory());
+      if (entrySkip) { skipOne(entrySkip); continue; }
       if (entry.isDirectory()) { walk(absPath); continue; }
       if (!entry.isFile()) { skipOne("not a regular file"); continue; }
 
       const stat = statSync(absPath);
-      if (stat.size > maxFileBytes) { skipOne("too large"); continue; }
-      const language = detectLanguage(relPath);
-      if (!language) { skipOne("unsupported extension"); continue; }
+      const filePolicy = policy.fileLanguageOrSkipReason(relPath, stat.size);
+      if (filePolicy.skipReason) { skipOne(filePolicy.skipReason); continue; }
       const buf = readFileSync(absPath);
-      if (buf.includes(0)) { skipOne("binary content"); continue; }
+      const contentSkip = policy.contentSkipReason(buf);
+      if (contentSkip) { skipOne(contentSkip); continue; }
       const text = buf.toString("utf8");
       files.push({
         absPath,
         relPath,
-        language,
+        language: filePolicy.language ?? "",
         size: stat.size,
         mtimeMs: stat.mtimeMs,
         hash: createHash("sha256").update(buf).digest("hex"),
@@ -84,16 +81,4 @@ export function normalizePathPrefix(pathPrefix?: string): string {
   const normalized = pathPrefix.trim().replace(/^\.\/?/, "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
   if (!normalized || normalized === ".") return "";
   return `${normalized}/`;
-}
-
-export function detectLanguage(path: string): string {
-  const lower = path.toLowerCase();
-  const ext = lower.match(/\.[^.]+$/)?.[0] ?? "";
-  if (!textExtensions.has(ext)) return "";
-  if (ext === ".md" || ext === ".mdx") return "markdown";
-  if ([".ts", ".tsx"].includes(ext)) return "typescript";
-  if ([".js", ".jsx", ".mjs", ".cjs"].includes(ext)) return "javascript";
-  if (ext === ".json") return "json";
-  if ([".yml", ".yaml"].includes(ext)) return "yaml";
-  return ext.slice(1);
 }

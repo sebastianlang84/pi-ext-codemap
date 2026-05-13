@@ -2,7 +2,8 @@ import { openRepoDb } from "./db.ts";
 import { getRepoInfo } from "./repo.ts";
 import { status } from "./indexer.ts";
 import { planQuery } from "./query-plan.ts";
-import { fileRoleBoost, fileRoles, rankAndSlice, toResult, type SearchRow } from "./ranking.ts";
+import { rankAndSlice } from "./ranking.ts";
+import { collectSearchCandidates, pathFilterForPrefix } from "./search-pipeline.ts";
 import { normalizePathPrefix } from "./scanner.ts";
 import type { SearchResult } from "./types.ts";
 
@@ -52,69 +53,11 @@ export function searchCodeMap(options: { query: string; cwd?: string; limit?: nu
   const limit = Math.min(Math.max(options.limit ?? 10, 1), 50);
   const plan = planQuery(options.query);
   const pathPrefix = normalizePathPrefix(options.pathPrefix);
-  const pathFilter = pathPrefix ? `${escapeLike(pathPrefix)}%` : "%";
 
   try {
-    const results: SearchResult[] = [];
-
-    if (plan.pathLike) {
-      const pathRows = db.prepare(`
-        select path, language, 1 as startLine, 1 as endLine, 'file' as kind, path as text, 0 as rank, null as symbolName
-        from files
-        where lower(path) like ? escape '\\' and path like ? escape '\\'
-        order by length(path), path
-        limit ?
-      `).all(`%${escapeLike(plan.pathNeedle.toLowerCase())}%`, pathFilter, Math.min(limit, 20)) as unknown as SearchRow[];
-      results.push(...pathRows.map((row) => toResult(row, plan, 30)));
-    }
-
-    if (plan.roleIntents.length > 0) {
-      const roleRows = db.prepare(`
-        select path, language, 1 as startLine, 1 as endLine, 'file' as kind, path as text, 0 as rank, null as symbolName
-        from files
-        where path like ? escape '\\'
-        order by length(path), path
-        limit 500
-      `).all(pathFilter) as unknown as SearchRow[];
-      results.push(...roleRows
-        .filter((row) => fileRoleBoost(fileRoles(row.path.toLowerCase()), plan.roleIntents) > 0)
-        .map((row) => toResult(row, plan, 18)));
-    }
-
-    for (const ftsQuery of plan.ftsQueries) {
-      const remaining = Math.max(limit * 2 - results.length, limit);
-      const chunkRows = db.prepare(`
-        select f.path, f.language, c.start_line as startLine, c.end_line as endLine, c.kind, c.text,
-               bm25(chunks_fts) as rank, null as symbolName
-        from chunks_fts
-        join chunks c on c.id = chunks_fts.rowid
-        join files f on f.id = c.file_id
-        where chunks_fts match ? and f.path like ? escape '\\'
-        order by rank
-        limit ?
-      `).all(ftsQuery.query, pathFilter, remaining) as unknown as SearchRow[];
-
-      const symbolRows = db.prepare(`
-        select f.path, f.language, s.start_line as startLine, coalesce(s.end_line, s.start_line) as endLine,
-               s.kind, coalesce(s.signature, s.name) as text, bm25(symbols_fts) as rank, s.name as symbolName
-        from symbols_fts
-        join symbols s on s.id = symbols_fts.rowid
-        join files f on f.id = s.file_id
-        where symbols_fts match ? and f.path like ? escape '\\'
-        order by rank
-        limit ?
-      `).all(ftsQuery.query, pathFilter, Math.ceil(remaining / 2)) as unknown as SearchRow[];
-
-      results.push(...symbolRows.map((row) => toResult(row, plan, ftsQuery.tierBoost + 4)));
-      results.push(...chunkRows.map((row) => toResult(row, plan, ftsQuery.tierBoost + 1)));
-    }
-
-    return rankAndSlice(results, limit);
+    const candidates = collectSearchCandidates(db, { plan, limit, pathFilter: pathFilterForPrefix(pathPrefix) });
+    return rankAndSlice(candidates, limit);
   } finally {
     db.close();
   }
-}
-
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
