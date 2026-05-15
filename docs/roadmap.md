@@ -49,7 +49,7 @@ Do not start embeddings, vector stores, graph work, or broad AST integration unt
 | Ranking | Hybrid lexical/semantic ranking, possibly Reciprocal Rank Fusion | Keep deterministic lexical ranking as the fallback; protect exact path/symbol matches. |
 | ast-grep and symbols | Optional query-time structural search plus stronger symbol extraction | Must degrade cleanly when `ast-grep` is unavailable. |
 | Graph and relationships | Small SQLite mini-graph for file/symbol/doc/test relationships, including test/doc relationship extraction | No external graph server. Promote only relationships that improve read-first context enough to justify maintenance. |
-| Related context | Better test/doc/dependency hints | Current V1 has simple path-based related test/doc hints. |
+| Related context | Better test/doc/dependency hints | Direct local imports and reverse-import callers are implemented for read-first context; remaining work should focus on measured gaps such as Markdown links or stronger test/doc relationships. |
 | CLI adapter | Add a thin `src/cli/` adapter over `src/core/` | Keep CLI output/argv parsing separate from product logic; see the architecture boundary in [`PRD.md`](PRD.md#17-packaging). |
 | Memory links | Link CodeMap results to `pi-memory` artifact references | Keep CodeMap rebuildable; durable decisions stay in memory. |
 | Automation | Optional hooks or commands for refresh workflows | Avoid daemon/background crawling as a default. |
@@ -60,7 +60,7 @@ Do not start embeddings, vector stores, graph work, or broad AST integration unt
 - Which vector backend, if any, is worth supporting first: `sqlite-vec`, Vec1, LanceDB, or an external vector backend?
 - How far should cheap regex symbol extraction go before using optional `ast-grep`?
 - How much query-time structural search should come from `ast-grep`, and what should remain lexical/FTS-only?
-- Which graph/test/doc relationships are useful enough for V1.5/V2?
+- After direct/reverse import hints, which graph/test/doc relationships are useful enough for V1.5/V2?
 - When should a CLI adapter become worth adding, and which output modes besides JSON are needed?
 - Should refresh automation be an explicit command, hook, or remain manual-only?
 

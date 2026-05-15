@@ -268,6 +268,23 @@ test("context direct files keep later target chunks when no related files exist"
   assert.deepEqual(result.readFirst.map((item) => item.startLine), [1, 71]);
 });
 
+test("context read-first includes indexed local files that import the target", (t) => {
+  const root = fixtureRepo(t);
+  writeFileSync(join(root, "src", "core", "validation.ts"), "export function validateUser(id: string) { return Boolean(id); }\n");
+  writeFileSync(join(root, "src", "core", "user-service.ts"), "import { validateUser } from './validation';\nexport function approveUser(id: string) { return validateUser(id); }\n");
+  writeFileSync(join(root, "src", "pi-extension", "tools.ts"), "import { validateUser } from '../core/validation';\nexport const toolUsesValidation = validateUser;\n");
+  indexRepo({ cwd: root });
+
+  const result = codemapContext({ cwd: root, target: "src/core/validation.ts", limit: 4 });
+
+  assert.deepEqual(result.readFirst.slice(0, 3).map((item) => item.path), [
+    "src/core/validation.ts",
+    "src/core/user-service.ts",
+    "src/pi-extension/tools.ts",
+  ]);
+  assert.deepEqual(result.warnings, []);
+});
+
 test("context read-first excludes imported files outside pathPrefix", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-context-import-prefix-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -277,6 +294,7 @@ test("context read-first excludes imported files outside pathPrefix", (t) => {
 
   writeFileSync(join(root, "packages", "billing", "src", "invoice-service.ts"), "import { sharedLogger } from '../../shared/logger';\nexport const invoiceService = sharedLogger;\n");
   writeFileSync(join(root, "packages", "shared", "logger.ts"), "export const sharedLogger = true;\n");
+  writeFileSync(join(root, "packages", "shared", "consumer.ts"), "import { invoiceService } from '../billing/src/invoice-service';\nexport const consumer = invoiceService;\n");
   indexRepo({ cwd: root, approve: true });
 
   const result = codemapContext({ cwd: root, target: "invoice-service.ts", pathPrefix: "packages/billing", limit: 4 });

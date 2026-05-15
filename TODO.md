@@ -4,6 +4,8 @@
 
 Priorisierte Details stehen in [`docs/roadmap.md`](docs/roadmap.md#prioritized-next-steps). Arbeitsregel: Vor jedem Punkt kurz Scope, Benefit und ersten TDD-Test klären; ohne klaren Benefit wird der Punkt gestrichen oder vertagt.
 
+Aktuell kein offener taktischer Backlog. Nächster Kandidat nur bei konkretem Bedarf: repo-lokale Search-Quality-Cases aus einer kleinen Config-Datei statt hart codierter lokaler Repos.
+
 1. [x] Nicht-indexierte Repos neutral anzeigen.
    - Benefit: Nutzer/Agenten sehen „noch nicht bereit“ statt falschem Erfolg/Fehler.
    - Test: unapproved/unindexed Repo liefert neutralen Session-Status.
@@ -24,6 +26,15 @@ Priorisierte Details stehen in [`docs/roadmap.md`](docs/roadmap.md#prioritized-n
 7. [x] Search-Quality-Gates erweitern.
    - Benefit: echte Regressionen bei Entry-Points, Tests/Docs und Lockfile-/Generated-Noise fallen früh auf.
    - Test: `bench:search-quality:gate` enthält neue repräsentative Fälle und excluded-noise Checks.
+
+## V1.5 Context-Locality-Slices
+
+- [x] Direkte lokale Imports in `codemapContext` Read-first-Pakete aufnehmen.
+  - Benefit: Agenten lesen echte direkte Abhängigkeiten vor rein namensähnlichen Tests/Docs.
+  - Test: Target importiert `./db` und `./validation`; `readFirst` liefert Target, beide Imports, keine externen Packages.
+- [x] Reverse-Imports/Caller in `codemapContext` Read-first-Pakete aufnehmen.
+  - Benefit: Beim Ändern eines kleinen Moduls erscheinen lokale Call-sites/Tests, die das Modul importieren.
+  - Test: `validation.ts` wird von `user-service.ts` und `tools.ts` importiert; `readFirst` liefert Target plus beide Importer.
 
 ## Review-Funde vom TDD-Review
 

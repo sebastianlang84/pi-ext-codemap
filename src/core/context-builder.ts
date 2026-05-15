@@ -60,7 +60,7 @@ export function buildCodeMapContext(options: CodeMapContextOptions): CodeMapCont
     const warnings: string[] = [...(diagnostics.warnings ?? [])];
     const readFirst = readFirstItems(db, request, warnings, options.cwd, options.stateDir);
     const related = relatedPaths(db, readFirst.base, request.pathFilter);
-    const items = readFirst.direct ? localReadFirstItems(db, readFirst.items, readFirst.imports, related.tests, related.docs, request.limit) : readFirst.items;
+    const items = readFirst.direct ? localReadFirstItems(db, readFirst.items, readFirst.imports, readFirst.importers, related.tests, related.docs, request.limit) : readFirst.items;
     const lastIndexedAt = (db.prepare("select value from meta where key='last_indexed_at'").get() as { value: string } | undefined)?.value ?? null;
 
     return {
@@ -101,7 +101,7 @@ function readFirstItems(
   warnings: string[],
   cwd?: string,
   stateDir?: string,
-): { base: string; items: CodeMapReadFirstItem[]; imports: string[]; direct: boolean } {
+): { base: string; items: CodeMapReadFirstItem[]; imports: string[]; importers: string[]; direct: boolean } {
   const file = db.prepare("select id, path, language from files where (path = ? or path like ? escape '\\') and path like ? escape '\\' limit 1")
     .get(request.target, request.targetLike, request.pathFilter) as { id: number; path: string; language: string } | undefined;
 
@@ -111,6 +111,7 @@ function readFirstItems(
       base: request.target,
       items: searchCodeMap({ query: request.target, cwd, limit: request.limit, pathPrefix: request.pathPrefix, stateDir }),
       imports: [],
+      importers: [],
       direct: false,
     };
   }
@@ -121,12 +122,13 @@ function readFirstItems(
     base: file.path,
     items: chunks.map((chunk) => ({ path: file.path, language: file.language, ...chunk, snippet: snippet(chunk.text) })),
     imports: importedLocalPaths(db, file.path, request.pathFilter),
+    importers: importingLocalPaths(db, file.path, request.pathFilter),
     direct: true,
   };
 }
 
-function localReadFirstItems(db: ReturnType<typeof openRepoDb>, targetItems: CodeMapReadFirstItem[], imports: string[], tests: string[], docs: string[], limit: number): CodeMapReadFirstItem[] {
-  const related = [...imports, tests[0], docs[0], ...tests.slice(1), ...docs.slice(1)].filter((path): path is string => Boolean(path));
+function localReadFirstItems(db: ReturnType<typeof openRepoDb>, targetItems: CodeMapReadFirstItem[], imports: string[], importers: string[], tests: string[], docs: string[], limit: number): CodeMapReadFirstItem[] {
+  const related = [...imports, importers[0], tests[0], docs[0], ...importers.slice(1), ...tests.slice(1), ...docs.slice(1)].filter((path): path is string => Boolean(path));
   const relatedItems = related.flatMap((path) => firstChunkForPath(db, path));
   const items = targetItems.length > 0 ? [targetItems[0]] : [];
   items.push(...dedupeReadFirstItems(relatedItems, items).slice(0, Math.max(0, limit - items.length)));
@@ -151,6 +153,21 @@ function importedLocalPaths(db: ReturnType<typeof openRepoDb>, fromPath: string,
     .map((specifier) => resolveIndexedImport(db, fromPath, specifier, pathFilter))
     .filter((path): path is string => Boolean(path && path !== fromPath));
   return uniqueStrings(resolved).slice(0, 8);
+}
+
+function importingLocalPaths(db: ReturnType<typeof openRepoDb>, targetPath: string, pathFilter: string): string[] {
+  const rows = db.prepare("select path from files where path <> ? and path like ? escape '\\' order by path")
+    .all(targetPath, pathFilter) as Array<{ path: string }>;
+  const importers = rows
+    .filter((row) => indexedFileImportsTarget(db, row.path, targetPath, pathFilter))
+    .map((row) => row.path);
+  return sortByLocality(targetPath, uniqueStrings(importers)).slice(0, 8);
+}
+
+function indexedFileImportsTarget(db: ReturnType<typeof openRepoDb>, fromPath: string, targetPath: string, pathFilter: string): boolean {
+  const text = readIndexedSource(db, fromPath);
+  if (!text) return false;
+  return extractLocalModuleSpecifiers(text).some((specifier) => resolveIndexedImport(db, fromPath, specifier, pathFilter) === targetPath);
 }
 
 function readIndexedSource(db: ReturnType<typeof openRepoDb>, path: string): string | undefined {

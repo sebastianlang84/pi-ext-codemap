@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Breaking: remove deprecated `codebase_*` tool aliases and `/codebase-*` commands. Use `codemap_*` tools and `/codemap-*` commands instead.
-- Improve `codemap_context` read-first packages by adding directly imported local files ahead of name-based test/doc hints.
+- Improve `codemap_context` read-first packages by adding directly imported local files and local caller hints alongside name-based test/doc hints.
 
 ## 0.5.0 - 2026-05-12
 
