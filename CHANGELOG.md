@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Breaking: remove deprecated `codebase_*` tool aliases and `/codebase-*` commands. Use `codemap_*` tools and `/codemap-*` commands instead.
+- Restructure documentation into product, user, and developer sections, with README kept as a concise entry point.
+- Remove stale compatibility wording and migration code for obsolete names/paths.
 - Improve `codemap_context` read-first packages by adding directly imported local files and local caller hints alongside name-based test/doc hints.
 - Keep lockfile/generated/build/minified neighbors out of read-first context while preserving useful related tests/docs.
 - Add internal ranking diagnostics for tests and benchmarks without adding public `codemap_search` explain fields.
@@ -22,7 +23,7 @@
 
 ## 0.4.1 - 2026-05-11
 
-- Move CodeMap indexes under `~/.pi/agent/state/codemap/` and migrate existing `~/.pi/agent/codemap/` or `~/.pi/agent/code-search/` data non-destructively.
+- Move CodeMap indexes under `~/.pi/agent/state/codemap/`.
 - Add a root Pi extension entrypoint for cleaner package discovery.
 
 ## 0.4.0 - 2026-05-11

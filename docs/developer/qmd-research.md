@@ -21,7 +21,7 @@ These are explicit CodeMap requirements for evaluating qmd or any other prior-ar
 
 1. **Lightweight on normal notebooks**: default behavior must stay laptop/notebook-friendly, with low RAM use, no mandatory model downloads, no daemon, and no heavyweight runtime in ordinary agent loops.
 2. **Code + plain-file capable**: CodeMap should handle code and repository text/config together, including C/C++, TypeScript/JavaScript, Python, Markdown, YAML, TOML, JSON, shell, SQL, and similar plain files.
-3. **Best-of-breed, not blind copying**: when reviewing qmd, pi-memory variants, or future repos, combine useful ideas with CodeMap's existing strengths, but only when they preserve the lightweight/local/agent-friendly product shape.
+3. **Best-of-breed, not blind copying**: when reviewing qmd or future CodeMap-relevant repos, combine useful ideas with CodeMap's existing strengths, but only when they preserve the lightweight/local/agent-friendly product shape.
 4. **Structural first, semantic second**: prefer cheap path/symbol/chunk/config-key/doc-heading signals before adding embeddings or rerankers.
 5. **Opt-in heaviness**: embeddings, rerankers, query expansion, and vector databases are optional quality/research modes unless local benchmarks prove they are worth the compute cost.
 
@@ -144,7 +144,7 @@ This is more important than adding multiple embedders. If semantic search is add
 
 The model discussion mixes several decisions that should stay separate:
 
-1. **System target**: CodeMap, qmd, pi-lightmem, or skills/docs search.
+1. **System target**: CodeMap, qmd, or another non-CodeMap docs/search tool.
 2. **Content type**: code, Markdown, YAML/JSON, plain text, or memory records.
 3. **Retrieval stage**: lexical BM25/FTS, vector search, reranking, or query expansion.
 4. **Integration path**: qmd out-of-the-box, CodeMap-native adapter, Ollama, `node-llama-cpp`/GGUF, ONNX/SentenceTransformers, etc.
@@ -190,7 +190,7 @@ Recommended profiles for CodeMap-style tooling:
 Do not choose from leaderboards alone. Use a repo-local benchmark with:
 
 - 20-50 real German/English mixed queries.
-- Code questions, docs questions, symbol/API questions, YAML/JSON config questions, memory/decision questions, and error-message lookups.
+- Code questions, docs questions, symbol/API questions, YAML/JSON config questions, project-decision docs, and error-message lookups.
 - Metrics: Hit@1, Hit@3, MRR, cold/warm latency, peak RAM, index size, re-embedding time, and semantic false positives.
 - Candidate stacks: BM25 only; BM25 + EmbeddingGemma; BM25 + multilingual-e5-small; BM25 + Qwen3-Embedding; BM25 + EmbeddingGemma + GTE reranker; BM25 + EmbeddingGemma + Qwen3 reranker; qmd full query pipeline.
 
@@ -223,7 +223,7 @@ Short term:
 1. Add/maintain this qmd prior-art note.
 2. Improve chunking quality, especially Markdown/code-fence handling.
 3. Add search/ranking explain traces for debugging and benchmarks.
-4. Keep `docs/search-quality.md` focused on deterministic regression metrics.
+4. Keep [`search-quality.md`](search-quality.md) focused on deterministic regression metrics.
 
 Medium term:
 
@@ -234,5 +234,5 @@ Medium term:
 
 Separate tool track:
 
-- Evaluate qmd itself for Markdown-heavy agent context such as `~/.pi/agent/skills`, AGENTS/reference docs, and possible `pi-lightmem` Markdown records.
+- Evaluate qmd itself for Markdown-heavy agent context such as `~/.pi/agent/skills` and AGENTS/reference docs.
 - Do not force CodeMap to become the global Markdown/skill search system; qmd may be better suited for that domain.

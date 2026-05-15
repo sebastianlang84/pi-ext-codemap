@@ -2,7 +2,7 @@
 
 ## Active tactical backlog
 
-Quelle: [`docs/roadmap.md`](docs/roadmap.md#future-work). Arbeitsregel: Erst **A) mehr aus dem bestehenden leichten CodeMap herausholen**; **B) neue Fähigkeiten** bleiben in der Roadmap, bis ein konkreter Bedarf belegt ist. CodeMap bleibt primär Agent-Navigationswerkzeug: Einstiegspunkt + Nachbarn + Gründe, nicht allgemeines Code-Retrieval-System.
+Quelle: [`docs/product/roadmap.md`](docs/product/roadmap.md#future-work). Arbeitsregel: Erst **A) mehr aus dem bestehenden leichten CodeMap herausholen**; **B) neue Fähigkeiten** bleiben in der Roadmap, bis ein konkreter Bedarf belegt ist. CodeMap bleibt primär Agent-Navigationswerkzeug: Einstiegspunkt + Nachbarn + Gründe, nicht allgemeines Code-Retrieval-System.
 
 1. [ ] File-Rollen und Noise-Penalty-System härten.
    - Score: Lightweight 5/5, Nützlichkeit 5/5, Attraktivität 5/5.
@@ -42,4 +42,4 @@ Quelle: [`docs/roadmap.md`](docs/roadmap.md#future-work). Arbeitsregel: Erst **A
    - Benefit: CodeMap ist außerhalb der Pi-Extension nutzbar und die Core/Adapter-Grenze wird geprüft; verbessert nicht direkt Search-Qualität.
    - Test: CLI-Integration nutzt temp `stateDir`, dupliziert keine State-Logik und gibt stabiles JSON aus.
 
-Weitere Zukunfts- und Parkthemen stehen in [`docs/roadmap.md`](docs/roadmap.md#future-work). Abgeschlossene Lieferungshistorie steht ebenfalls dort, nicht im TODO.
+Weitere Zukunfts- und Parkthemen stehen in [`docs/product/roadmap.md`](docs/product/roadmap.md#future-work). Abgeschlossene Lieferungshistorie steht ebenfalls dort, nicht im TODO.

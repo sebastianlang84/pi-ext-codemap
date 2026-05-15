@@ -100,7 +100,7 @@ Custom numeric thresholds must be present and in range. Supplying any custom gat
 
 ## Ranking/noise behavior covered by tests
 
-The current product contract is documented in [`docs/PRD.md#15-ranking-and-noise-handling`](PRD.md#15-ranking-and-noise-handling). The benchmark and unit tests act as executable documentation for these rules:
+The current product contract is documented in [`../product/PRD.md#12-ranking-and-noise-handling`](../product/PRD.md#12-ranking-and-noise-handling). The benchmark and unit tests act as executable documentation for these rules:
 
 - Lockfiles are indexed so explicit queries such as `package-lock.json` can find them.
 - Ordinary dependency or phrase queries should prefer source/config/docs/tests and should not include lockfiles in the top results.
@@ -130,7 +130,7 @@ The default benchmark intentionally stays deterministic and model-free. If CodeM
 A semantic evaluation should include:
 
 - German and English mixed queries.
-- Code, Markdown docs, YAML/JSON config, memory/decision-style notes, and error-message lookups.
+- Code, Markdown docs, YAML/JSON config, project-decision docs, and error-message lookups.
 - Candidate stacks such as BM25 only, BM25 + `embeddinggemma-300M`, BM25 + `multilingual-e5-small`, BM25 + `Qwen3-Embedding-0.6B`, and optional reranker variants.
 - Additional runtime metrics: cold/warm latency, peak RAM, index size, re-embedding time, model download size, and semantic false positives.
 

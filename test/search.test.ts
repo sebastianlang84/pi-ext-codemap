@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, mkdirSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import test, { after, type TestContext } from "node:test";
 
 const storageHome = mkdtempSync(join(tmpdir(), "pi-codemap-home-"));
@@ -374,14 +373,14 @@ test("context read-first locality includes nested sibling tests and docs within 
   execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
   mkdirSync(join(root, "packages", "billing", "src"), { recursive: true });
   mkdirSync(join(root, "packages", "billing", "docs"), { recursive: true });
-  mkdirSync(join(root, "packages", "billing", "legacy"), { recursive: true });
+  mkdirSync(join(root, "packages", "billing", "archive"), { recursive: true });
   mkdirSync(join(root, "packages", "web", "src"), { recursive: true });
   mkdirSync(join(root, "packages", "web", "docs"), { recursive: true });
 
   writeFileSync(join(root, "packages", "billing", "src", "invoice-service.ts"), `${Array.from({ length: 90 }, (_, index) => `export const invoiceLine${index} = ${index};`).join("\n")}\n`);
   writeFileSync(join(root, "packages", "billing", "src", "invoice-service.test.ts"), "import './invoice-service';\n");
   writeFileSync(join(root, "packages", "billing", "docs", "invoice-service.md"), "# Invoice service\n\nBilling invoice docs.\n");
-  writeFileSync(join(root, "packages", "billing", "legacy", "invoice-service.test.ts"), "import '../src/invoice-service';\n");
+  writeFileSync(join(root, "packages", "billing", "archive", "invoice-service.test.ts"), "import '../src/invoice-service';\n");
   writeFileSync(join(root, "packages", "web", "src", "invoice-service.test.ts"), "import './invoice-service';\n");
   writeFileSync(join(root, "packages", "web", "docs", "invoice-service.md"), "# Web invoice docs\n");
   indexRepo({ cwd: root, approve: true });
@@ -401,7 +400,7 @@ test("context read-first locality includes nested sibling tests and docs within 
   ]);
   assert.deepEqual(result.relatedTests, [
     "packages/billing/src/invoice-service.test.ts",
-    "packages/billing/legacy/invoice-service.test.ts",
+    "packages/billing/archive/invoice-service.test.ts",
   ]);
   assert.deepEqual(result.relatedDocs, ["packages/billing/docs/invoice-service.md"]);
   assert.ok(result.readFirst.every((item) => item.path.startsWith("packages/billing/")));
@@ -612,30 +611,13 @@ export function isolatedFeature() {
   }
 });
 
-test("CodeMap uses state storage and migrates legacy repo DBs", (t) => {
+test("CodeMap uses state storage for registry and repo DBs", (t) => {
   const root = fixtureRepo(t);
   const info = getRepoInfo(root);
+
   assert.match(info.dbPath, /\.pi\/agent\/state\/codemap\/repos\//);
+  assert.ok(existsSync(join(storageHome, ".pi", "agent", "state", "codemap", "registry.sqlite")));
   assert.ok(existsSync(info.dbPath));
-
-  const legacyHome = mkdtempSync(join(tmpdir(), "pi-codemap-legacy-home-"));
-  t.after(() => rmSync(legacyHome, { recursive: true, force: true }));
-  const legacyRegistry = join(legacyHome, ".pi", "agent", "codemap", "registry.sqlite");
-  const legacyDb = join(legacyHome, ".pi", "agent", "codemap", "repos", `${info.key}.sqlite`);
-  mkdirSync(join(legacyHome, ".pi", "agent", "codemap", "repos"), { recursive: true });
-  copyFileSync(join(storageHome, ".pi", "agent", "state", "codemap", "registry.sqlite"), legacyRegistry);
-  copyFileSync(info.dbPath, legacyDb);
-
-  const repoModuleUrl = pathToFileURL(join(process.cwd(), "src", "core", "repo.ts")).href;
-  const script = `const { getRepoInfo } = await import(${JSON.stringify(repoModuleUrl)}); console.log(JSON.stringify(getRepoInfo(${JSON.stringify(root)})));`;
-  const output = execFileSync(process.execPath, ["--experimental-strip-types", "-e", script], {
-    encoding: "utf8",
-    env: { ...process.env, HOME: legacyHome, USERPROFILE: legacyHome },
-  });
-  const migrated = JSON.parse(output) as { dbPath: string };
-  assert.match(migrated.dbPath, /\.pi\/agent\/state\/codemap\/repos\//);
-  assert.ok(existsSync(join(legacyHome, ".pi", "agent", "state", "codemap", "registry.sqlite")));
-  assert.ok(existsSync(migrated.dbPath));
 });
 
 test("session start shows neutral status for an unapproved repo", async (t) => {

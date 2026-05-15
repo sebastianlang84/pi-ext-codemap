@@ -1,17 +1,17 @@
 # CodeMap Roadmap
 
-This roadmap is the canonical home for future/non-V1 ideas, deferred questions, and historical delivery notes. The current V1 product contract lives in [`PRD.md`](PRD.md). The historical brainstorming note is archived at [`docs/archive/brainstorming.md`](archive/brainstorming.md).
+This roadmap is the canonical home for future/non-V1 ideas, deferred questions, and historical delivery notes. The current V1 product contract lives in [`PRD.md`](PRD.md). The historical brainstorming note is archived at [`../archive/brainstorming.md`](../archive/brainstorming.md).
 
 ## Current V1 contract
 
 Do not duplicate the full V1 contract here. Use the PRD as the authoritative source for:
 
 - V1 scope and explicit non-goals: [`PRD.md#9-v1-scope`](PRD.md#9-v1-scope)
-- safety and privacy requirements: [`PRD.md#11-safety-and-privacy-requirements`](PRD.md#11-safety-and-privacy-requirements)
-- storage and database design: [`PRD.md#12-data-storage`](PRD.md#12-data-storage), [`PRD.md#13-database-design`](PRD.md#13-database-design)
-- tool and command contracts: [`PRD.md#14-tool-api`](PRD.md#14-tool-api), [`PRD.md#16-commands`](PRD.md#16-commands)
-- packaging and core/adapter boundary: [`PRD.md#17-packaging`](PRD.md#17-packaging)
-- implementation decisions and resolved defaults: [`PRD.md#19-implementation-decisions`](PRD.md#19-implementation-decisions), [`PRD.md#22-resolved-defaults`](PRD.md#22-resolved-defaults)
+- safety and privacy requirements: [`PRD.md#10-safety-and-privacy-requirements`](PRD.md#10-safety-and-privacy-requirements)
+- storage and database design: [`../developer/architecture.md#storage`](../developer/architecture.md#storage), [`../developer/architecture.md#database-design`](../developer/architecture.md#database-design)
+- tool and command contracts: [`PRD.md#11-tool-api-contract`](PRD.md#11-tool-api-contract), [`../user/usage.md#commands-and-tools`](../user/usage.md#commands-and-tools)
+- packaging and core/adapter boundary: [`PRD.md#13-packaging-and-implementation-decisions`](PRD.md#13-packaging-and-implementation-decisions), [`../developer/architecture.md#architecture-boundary`](../developer/architecture.md#architecture-boundary)
+- implementation decisions and resolved defaults: [`PRD.md#13-packaging-and-implementation-decisions`](PRD.md#13-packaging-and-implementation-decisions), [`PRD.md#16-resolved-defaults`](PRD.md#16-resolved-defaults)
 
 Roadmap items must preserve the V1 baseline constraints unless the PRD is explicitly changed first: laptop/notebook-friendly defaults, low RAM use, local SQLite/FTS5 indexing under `~/.pi/agent/state/codemap/`, no mandatory model downloads, no daemon or heavyweight runtime in ordinary agent loops, explicit per-repo approval, incremental scanning with conservative ignore/secret/binary/generated-file exclusions, line-bounded chunks for code/Markdown/text, broad code/plain-file coverage, cheap symbol extraction, status/index/search/context tools and commands, and stale-index warnings instead of automatic background refreshes.
 
@@ -19,11 +19,11 @@ When evaluating prior art, CodeMap should combine the strongest compatible ideas
 
 ## Prior art
 
-- [`qmd` research notes](qmd-research.md) — lessons from `tobi/qmd` on Markdown/document retrieval, BM25/vector/RRF/reranking, local GGUF models, and what CodeMap should or should not borrow.
+- [`qmd` research notes](../developer/qmd-research.md) — lessons from `tobi/qmd` on Markdown/document retrieval, BM25/vector/RRF/reranking, local GGUF models, and what CodeMap should or should not borrow.
 
 ## Completed V1 improvement slices
 
-The previous prioritized TDD slices are complete and kept here as delivery history. `TODO.md` is the canonical tactical backlog; it contains only active concrete follow-up slices, each with scope, benefit, first test, and verification.
+The previous prioritized TDD slices are complete and kept here as delivery history. [`TODO.md`](../../TODO.md) is the canonical tactical backlog; it contains only active concrete follow-up slices, each with scope, benefit, first test, and verification.
 
 | Completed slice | Module / Seam | Public Interface tested | First behavior test | Verification |
 |---|---|---|---|---|
@@ -63,7 +63,7 @@ Hard design rule for future semantic search: **exact path/symbol > lexical FTS >
 | ast-grep and symbols | Optional query-time structural search plus stronger symbol extraction | Must degrade cleanly when `ast-grep` is unavailable. |
 | Graph and relationships | Small SQLite mini-graph for file/symbol/doc/test relationships, including test/doc relationship extraction | No external graph server. Promote only relationships that improve read-first context enough to justify maintenance. |
 | Related context | Better test/dependency/config hints for arbitrary repos | Direct local imports and reverse-import callers are implemented for read-first context; remaining work should focus on measured zero-config gaps such as stronger test/callsite/config relationships and context expansion reasons. Treat Markdown links as opportunistic, not central. |
-| CLI adapter | Add a thin `src/cli/` adapter over `src/core/` | Keep CLI output/argv parsing separate from product logic; see the architecture boundary in [`PRD.md`](PRD.md#17-packaging). |
+| CLI adapter | Add a thin `src/cli/` adapter over `src/core/` | Keep CLI output/argv parsing separate from product logic; see the architecture boundary in [`../developer/architecture.md`](../developer/architecture.md#architecture-boundary). |
 | Memory links | Link CodeMap results to `pi-memory` artifact references | Keep CodeMap rebuildable; durable decisions stay in memory. |
 | Automation | Optional hooks or commands for refresh workflows | Avoid daemon/background crawling as a default. |
 

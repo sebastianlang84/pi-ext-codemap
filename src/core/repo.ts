@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -14,30 +14,14 @@ function defaultStateDir(): string {
   return join(homedir(), ".pi", "agent", "state", "codemap");
 }
 
-function legacyStateDirs(): string[] {
-  return [
-    join(homedir(), ".pi", "agent", "codemap"),
-    join(homedir(), ".pi", "agent", "code-search"),
-  ];
-}
-
 function resolveStateDir(stateDir?: string): string {
   return stateDir ? resolve(stateDir) : defaultStateDir();
-}
-
-function copyFirstLegacyFileIfNeeded(sources: string[], target: string): void {
-  if (existsSync(target)) return;
-  const source = sources.find((candidate) => existsSync(candidate));
-  if (!source) return;
-  mkdirSync(dirname(target), { recursive: true });
-  copyFileSync(source, target);
 }
 
 export function getRegistryPath(options: StateOptions = {}): string {
   const baseDir = resolveStateDir(options.stateDir);
   const registryPath = join(baseDir, "registry.sqlite");
   mkdirSync(baseDir, { recursive: true });
-  if (!options.stateDir) copyFirstLegacyFileIfNeeded(legacyStateDirs().map((dir) => join(dir, "registry.sqlite")), registryPath);
   return registryPath;
 }
 
@@ -91,7 +75,6 @@ export function getRepoInfo(cwd = process.cwd(), options: StateOptions = {}): Re
   const root = findRepoRoot(cwd);
   const key = repoKey(root);
   const dbPath = join(resolveStateDir(options.stateDir), "repos", `${key}.sqlite`);
-  if (!options.stateDir) copyFirstLegacyFileIfNeeded(legacyStateDirs().map((dir) => join(dir, "repos", `${key}.sqlite`)), dbPath);
   const db = registryDb(options);
   const row = db.prepare("select enabled from repos where key = ?").get(key) as { enabled: number } | undefined;
   db.close();
