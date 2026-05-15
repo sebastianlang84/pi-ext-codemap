@@ -21,23 +21,23 @@ When evaluating prior art, CodeMap should combine the strongest compatible ideas
 
 - [`qmd` research notes](qmd-research.md) — lessons from `tobi/qmd` on Markdown/document retrieval, BM25/vector/RRF/reranking, local GGUF models, and what CodeMap should or should not borrow.
 
-## Prioritized next steps
+## Completed V1 improvement slices
 
-Keep this plan intentionally small. `TODO.md` tracks tactical backlog items; this section orders the next improvement slices so each can be delivered with one TDD vertical slice before moving on.
+The previous prioritized TDD slices are complete and kept here as delivery history. `TODO.md` is the canonical tactical backlog; it currently has no open tactical items. When new work is selected, promote one concrete slice from [Future work](#future-work) or [Deferred questions](#deferred-questions) into `TODO.md` with scope, benefit, first TDD test, and verification.
 
-| Step | Improvement slice | Module / Seam | Public Interface to test | First behavior test | Verification |
-|---|---|---|---|---|---|
-| 1 | Make unindexed repo status neutral | Pi status Adapter over the core status Module | `session_start` status output and `codemap_status` contract | In an unapproved or not-yet-indexed repo, the UI shows a neutral state such as `CodeMap ○` / `not indexed`, not success or failure | `npm test -- --test-name-pattern='status'` |
-| 2 | Make repo state injectable | Repo/DB state Module; `cwd`/`stateDir` Seam between core and Adapters | `approveRepo`, `indexRepo`, `status`, `searchCodeMap`, `codemapContext` | A temp `stateDir` isolates registry/index DBs and does not touch the default state path | `npm test -- --test-name-pattern='repo|state|db'` |
-| 3 | Shrink adapter prompt surface | Operation catalog Module; tools/commands as Adapters | registered `promptSnippet` / `promptGuidelines` metadata | Registered CodeMap tools still explain status/index/search/context usage while staying under a small prompt budget | `npm test -- --test-name-pattern='operation|prompt|tool'` |
-| 4 | Improve read-first locality | Context builder Module behind the `codemapContext` Interface | `codemapContext` result package | For a nested package target, context returns the target plus sibling tests/docs in stable read-first order and respects `pathPrefix` | `npm test -- --test-name-pattern='context|pathPrefix'` |
-| 5 | Improve chunking around structure | Chunker Module behind indexing/search Interfaces | `indexRepo` → `searchCodeMap` / `codemapContext` snippets | Markdown fenced code blocks are not split, and function/class-sized code chunks keep stable line ranges | `npm test -- --test-name-pattern='chunk|snippet'` |
-| 6 | Keep ranking explain out of the product surface | Search pipeline/ranking Modules | `SearchResult` remains compact | Decision: do not add user-facing explain fields; use quality gates for ranking guardrails instead | n/a |
-| 7 | Expand deterministic search-quality gates | Search quality metrics Module and benchmark script | `npm run bench:search-quality:gate` | New regression cases cover implementation entrypoints, related tests/docs, and lockfile/generated-file noise | `npm run bench:search-quality:gate -- /path/to/repo` |
+| Completed slice | Module / Seam | Public Interface tested | First behavior test | Verification |
+|---|---|---|---|---|
+| Make unindexed repo status neutral | Pi status Adapter over the core status Module | `session_start` status output and `codemap_status` contract | In an unapproved or not-yet-indexed repo, the UI shows a neutral state such as `CodeMap ○` / `not indexed`, not success or failure | `npm test -- --test-name-pattern='status'` |
+| Make repo state injectable | Repo/DB state Module; `cwd`/`stateDir` Seam between core and Adapters | `approveRepo`, `indexRepo`, `status`, `searchCodeMap`, `codemapContext` | A temp `stateDir` isolates registry/index DBs and does not touch the default state path | `npm test -- --test-name-pattern='repo|state|db'` |
+| Shrink adapter prompt surface | Operation catalog Module; tools/commands as Adapters | registered `promptSnippet` / `promptGuidelines` metadata | Registered CodeMap tools still explain status/index/search/context usage while staying under a small prompt budget | `npm test -- --test-name-pattern='operation|prompt|tool'` |
+| Improve read-first locality | Context builder Module behind the `codemapContext` Interface | `codemapContext` result package | For a nested package target, context returns the target plus sibling tests/docs in stable read-first order and respects `pathPrefix` | `npm test -- --test-name-pattern='context|pathPrefix'` |
+| Improve chunking around structure | Chunker Module behind indexing/search Interfaces | `indexRepo` → `searchCodeMap` / `codemapContext` snippets | Markdown fenced code blocks are not split, and function/class-sized code chunks keep stable line ranges | `npm test -- --test-name-pattern='chunk|snippet'` |
+| Keep ranking explain out of the product surface | Search pipeline/ranking Modules | `SearchResult` remains compact | Decision: do not add user-facing explain fields; use quality gates for ranking guardrails instead | n/a |
+| Expand deterministic search-quality gates | Search quality metrics Module and benchmark script | `npm run bench:search-quality:gate` | New regression cases cover implementation entrypoints, related tests/docs, and lockfile/generated-file noise | `npm run bench:search-quality:gate -- /path/to/repo` |
 
-Architecture rule for every slice: preserve Depth by keeping product logic in `src/core/` and Pi/TUI concerns in `src/pi-extension/`; add a Seam only when it improves Locality or enables a real Adapter. TDD rule: one behavior test through the public Interface, minimal Implementation to green, then refactor.
+Architecture rule for future slices: preserve Depth by keeping product logic in `src/core/` and Pi/TUI concerns in `src/pi-extension/`; add a Seam only when it improves Locality or enables a real Adapter. TDD rule: one behavior test through the public Interface, minimal Implementation to green, then refactor.
 
-Do not start embeddings, vector stores, graph work, or broad AST integration until steps 4-7 have measurable regressions/quality data showing the lexical/structural baseline is insufficient.
+Do not start embeddings, vector stores, graph work, or broad AST integration until existing search-quality gates show the lexical/structural baseline is insufficient for a concrete use case.
 
 ## Future work
 
