@@ -236,14 +236,3 @@ Separate tool track:
 
 - Evaluate qmd itself for Markdown-heavy agent context such as `~/.pi/agent/skills`, AGENTS/reference docs, and possible `pi-lightmem` Markdown records.
 - Do not force CodeMap to become the global Markdown/skill search system; qmd may be better suited for that domain.
-
-## Related Pi memory-system prior art
-
-These repos are not CodeMap replacements, but they are relevant when comparing qmd-style Markdown retrieval, current `pi-memory`, and the planned `pi-lightmem` direction:
-
-| Repo | Why it matters for comparison | Initial differentiation note |
-|---|---|---|
-| [`jayzeng/pi-memory`](https://github.com/jayzeng/pi-memory) | Pi memory extension using Markdown files plus optional qmd retrieval/injection. | Closest to the `pi-lightmem` direction: filesystem/Markdown-first, with optional qmd as a search layer. Compare especially qmd integration, selective injection, daily logs, and scratchpad behavior. |
-| [`tickernelz/pi-memory`](https://github.com/tickernelz/pi-memory) | Pi memory extension built around fixed Markdown files such as `MEMORY.md`, `IDENTITY.md`, `USER.md`, and daily logs. | Closer to a simple file-backed memory/context-injection system. Compare with current structured SQLite `pi-memory`, especially boundaries between durable memory, identity/profile files, and agent instructions. |
-
-Comparison guardrail: borrow strengths from these systems only when they preserve the lightweight/local/default-safe model. Do not mix durable memory, identity/persona, repo index, and prompt-injection mechanisms into one undifferentiated store.
