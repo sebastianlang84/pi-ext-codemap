@@ -3,7 +3,7 @@ import { openRepoDb } from "./db.ts";
 import { extractSymbols } from "./symbols.ts";
 import type { ScannedFile } from "./scanner.ts";
 
-const INDEX_VERSION = "3";
+const INDEX_VERSION = "4";
 
 export interface IndexStoreResult {
   indexed: number;

@@ -16,7 +16,7 @@ Priorisierte Details stehen in [`docs/roadmap.md`](docs/roadmap.md#prioritized-n
 4. [x] `codemapContext` Locality verbessern.
    - Benefit: bessere Read-first-Pakete mit passenden Tests/Docs, weniger manuelles Suchen.
    - Test: nested Fixture liefert Ziel, sibling Tests/Docs und respektiert `pathPrefix`.
-5. [ ] Chunking für Markdown/Fences und Code-Struktur verbessern.
+5. [x] Chunking für Markdown/Fences und Code-Struktur verbessern.
    - Benefit: stabilere, lesbarere Snippets mit besseren Line-Ranges.
    - Test: fenced code wird nicht gesplittet; Funktions-/Klassenbereiche bleiben stabil.
 6. [ ] Ranking-/Explain-Guardrails hinzufügen.
