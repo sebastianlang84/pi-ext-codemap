@@ -12,7 +12,7 @@
 - Harden ranking roles and noise penalties so source/config/docs/tests beat generated/build/vendor/minified/large-JSON noise unless noisy files are explicitly requested.
 - Add a token-injection budget report and test gate for registered CodeMap Pi tools.
 - Make the search-quality gate deterministic by defaulting it to checked-in fixtures and moving private local real-repo benchmarks behind an opt-in local mode.
-- Add endpoint/route and config-key query-class coverage to public search/context tests and the checked-in search-quality fixture.
+- Add endpoint/route, config-key, and error-message query-class coverage to public search/context tests and the checked-in search-quality fixture.
 
 ## 0.5.0 - 2026-05-12
 

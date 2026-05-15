@@ -234,6 +234,47 @@ test("config-key queries find source config before docs and lockfile noise", (t)
   assert.ok(!readFirstPaths.includes("package-lock.json"), JSON.stringify(readFirstPaths));
 });
 
+test("error-message queries find throwing source before docs and generated noise", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-error-query-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src", "newsletter"), { recursive: true });
+  mkdirSync(join(root, "tests", "newsletter"), { recursive: true });
+  mkdirSync(join(root, "docs"), { recursive: true });
+  mkdirSync(join(root, "dist"), { recursive: true });
+
+  writeFileSync(join(root, "src", "newsletter", "snapshot-service.ts"), `
+export function requireFreshSnapshot(snapshotAgeMs: number) {
+  if (snapshotAgeMs > 900000) {
+    throw new Error("ERR_NEWSLETTER_SNAPSHOT_STALE: macro snapshot is too old");
+  }
+  return true;
+}
+`);
+  writeFileSync(join(root, "tests", "newsletter", "snapshot-service.test.ts"), `
+import { requireFreshSnapshot } from "../../src/newsletter/snapshot-service";
+
+export const staleSnapshotTest = requireFreshSnapshot;
+`);
+  writeFileSync(join(root, "docs", "newsletter-errors.md"), "# Newsletter errors\n\nERR_NEWSLETTER_SNAPSHOT_STALE: macro snapshot is too old means operators should refresh data.\n");
+  writeFileSync(join(root, "package-lock.json"), JSON.stringify({ noise: "ERR_NEWSLETTER_SNAPSHOT_STALE macro snapshot stale error" }, null, 2));
+  writeFileSync(join(root, "dist", "snapshot-service.js"), "throw new Error('ERR_NEWSLETTER_SNAPSHOT_STALE: macro snapshot is too old');\n");
+
+  indexRepo({ cwd: root, approve: true });
+
+  const results = searchCodeMap({ cwd: root, query: "ERR_NEWSLETTER_SNAPSHOT_STALE macro snapshot stale error", limit: 5 });
+  assert.equal(results[0]?.path, "src/newsletter/snapshot-service.ts");
+  assert.ok(results.every((result) => result.path !== "package-lock.json"), JSON.stringify(results.map((result) => result.path)));
+  assert.ok(results.every((result) => result.path !== "dist/snapshot-service.js"), JSON.stringify(results.map((result) => result.path)));
+
+  const contextResult = codemapContext({ cwd: root, target: results[0]?.path ?? "", limit: 5 });
+  const readFirstPaths = contextResult.readFirst.map((item) => item.path);
+  assert.equal(readFirstPaths[0], "src/newsletter/snapshot-service.ts");
+  assert.ok(readFirstPaths.includes("tests/newsletter/snapshot-service.test.ts"), JSON.stringify(readFirstPaths));
+  assert.ok(!readFirstPaths.includes("dist/snapshot-service.js"), JSON.stringify(readFirstPaths));
+  assert.ok(!readFirstPaths.includes("package-lock.json"), JSON.stringify(readFirstPaths));
+});
+
 test("phrase queries find phrase-bearing docs without lockfile noise", (t) => {
   const root = fixtureRepo(t);
   const results = searchCodeMap({ cwd: root, query: "\"ignored directory\"", limit: 5 });

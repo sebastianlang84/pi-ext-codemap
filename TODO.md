@@ -6,7 +6,7 @@ Active offene Arbeit für `pi-ext-codemap`. Abgehakte Punkte werden hier gelösc
 
 1. [ ] Typische Query-Klassen als vertikale TDD-Slices abdecken.
    - Scope: je ein repräsentativer öffentlicher Navigationsfall für Symbol, Pfad, Fehlermeldung, Endpoint/Route, Config-Key und noisy query.
-   - Progress: Endpoint/Route und Config-Key sind über öffentliche Search/Context-Fixtures plus checked-in Search-Quality-Fixture abgedeckt.
+   - Progress: Endpoint/Route, Config-Key und Fehlermeldung sind über öffentliche Search/Context-Fixtures plus checked-in Search-Quality-Fixture abgedeckt.
    - Test: pro Query-Klasse ein Fixture + öffentlicher Test für Top-Ergebnis und optionales Context-Paket.
    - Stop: keine neue Retrieval-Schicht ohne konkreten roten Navigationsfall.
 
