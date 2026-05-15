@@ -211,6 +211,80 @@ test("context packages direct files with related tests and docs", (t) => {
   assert.deepEqual(result.warnings, []);
 });
 
+test("context read-first includes directly imported local files", (t) => {
+  const root = fixtureRepo(t);
+  mkdirSync(join(root, "test"), { recursive: true });
+  writeFileSync(join(root, "src", "core", "user-service.ts"), `
+import { connectDb } from "./db";
+import { validateUser } from "./validation.ts";
+import { externalClient } from "external-package";
+
+export function approveUser(id: string) {
+  validateUser(id);
+  return connectDb().approve(id, externalClient);
+}
+`);
+  writeFileSync(join(root, "src", "core", "db.ts"), "export function connectDb() { return { approve: (id: string, client: unknown) => ({ id, client }) }; }\n");
+  writeFileSync(join(root, "src", "core", "validation.ts"), "export function validateUser(id: string) { if (!id) throw new Error('missing id'); }\n");
+  writeFileSync(join(root, "test", "user-service.test.ts"), "import '../src/core/user-service';\n");
+  writeFileSync(join(root, "docs", "user-service.md"), "# User service\n");
+  indexRepo({ cwd: root });
+
+  const result = codemapContext({ cwd: root, target: "src/core/user-service.ts", limit: 5 });
+
+  assert.deepEqual(result.readFirst.slice(0, 3).map((item) => item.path), [
+    "src/core/user-service.ts",
+    "src/core/db.ts",
+    "src/core/validation.ts",
+  ]);
+  assert.ok(result.readFirst.every((item) => item.path !== "external-package"));
+  assert.deepEqual(result.warnings, []);
+});
+
+test("context import hints come from indexed content when target is stale", (t) => {
+  const root = fixtureRepo(t);
+  writeFileSync(join(root, "src", "core", "user-service.ts"), "import { connectDb } from './db';\nexport const userService = connectDb;\n");
+  writeFileSync(join(root, "src", "core", "db.ts"), "export function connectDb() { return true; }\n");
+  writeFileSync(join(root, "src", "core", "validation.ts"), "export function validateUser() { return true; }\n");
+  indexRepo({ cwd: root });
+  writeFileSync(join(root, "src", "core", "user-service.ts"), "import { validateUser } from './validation';\nexport const userService = validateUser;\n");
+
+  const result = codemapContext({ cwd: root, target: "src/core/user-service.ts", limit: 4 });
+  const paths = result.readFirst.map((item) => item.path);
+
+  assert.equal(result.stale, true);
+  assert.ok(paths.includes("src/core/db.ts"));
+  assert.ok(!paths.includes("src/core/validation.ts"));
+});
+
+test("context direct files keep later target chunks when no related files exist", (t) => {
+  const root = fixtureRepo(t);
+  writeFileSync(join(root, "src", "core", "long-context.ts"), `${Array.from({ length: 120 }, (_, index) => `export const longContextLine${index} = ${index};`).join("\n")}\n`);
+  indexRepo({ cwd: root });
+
+  const result = codemapContext({ cwd: root, target: "src/core/long-context.ts", limit: 2 });
+
+  assert.deepEqual(result.readFirst.map((item) => item.path), ["src/core/long-context.ts", "src/core/long-context.ts"]);
+  assert.deepEqual(result.readFirst.map((item) => item.startLine), [1, 71]);
+});
+
+test("context read-first excludes imported files outside pathPrefix", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-context-import-prefix-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "packages", "billing", "src"), { recursive: true });
+  mkdirSync(join(root, "packages", "shared"), { recursive: true });
+
+  writeFileSync(join(root, "packages", "billing", "src", "invoice-service.ts"), "import { sharedLogger } from '../../shared/logger';\nexport const invoiceService = sharedLogger;\n");
+  writeFileSync(join(root, "packages", "shared", "logger.ts"), "export const sharedLogger = true;\n");
+  indexRepo({ cwd: root, approve: true });
+
+  const result = codemapContext({ cwd: root, target: "invoice-service.ts", pathPrefix: "packages/billing", limit: 4 });
+
+  assert.deepEqual(result.readFirst.map((item) => item.path), ["packages/billing/src/invoice-service.ts"]);
+  assert.ok(result.readFirst.every((item) => item.path.startsWith("packages/billing/")));
+});
+
 test("context read-first locality includes nested sibling tests and docs within pathPrefix", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-context-locality-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
