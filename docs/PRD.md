@@ -163,19 +163,9 @@ V1 explicitly excludes:
 - background crawl across repos
 - Prisma ORM
 
-## 10. V1.5 / V2 Scope
+## 10. Future Work Boundary
 
-Possible later additions:
-
-- embedding provider interface
-- FastEmbed/ONNX adapter
-- `sqlite-vec`, Vec1, LanceDB, or external vector backend
-- hybrid ranking via Reciprocal Rank Fusion
-- ast-grep query-time integration
-- stronger symbol extraction
-- SQLite mini-graph
-- test/doc relationship extraction
-- memory artifact linking
+Future and non-V1 ideas are tracked in [`roadmap.md`](roadmap.md). They are not part of this PRD unless explicitly promoted into the V1 contract here.
 
 ## 11. Safety and Privacy Requirements
 
@@ -224,12 +214,12 @@ Default is whitelist-first.
 
 Index common code, docs, and config files only:
 
-- TS/JS
+- TypeScript/JavaScript
 - Python
 - Shell
-- Go/Rust/Java/etc. later as simple text
+- Go/Rust/Java/Kotlin/Ruby/PHP/C/C++ and similar files as simple text
 - Markdown/MDX/RST/TXT
-- JSON/YAML/TOML
+- JSON/YAML/TOML/SQL/CSS/SCSS/HTML
 - important config files
 
 Default excludes:
@@ -266,7 +256,9 @@ target
 
 ### Size Limits
 
-Recommended defaults:
+V1 uses a simple supported-text file size limit of 1 MB. Files above the active limit are skipped and counted in status output.
+
+If CodeMap later introduces per-category limits, the recommended defaults are:
 
 ```text
 max_file_size_default: 512 KB
@@ -274,8 +266,6 @@ max_file_size_code: 1 MB
 max_file_size_docs: 1 MB
 max_file_size_absolute: 2 MB
 ```
-
-Files above the limit are skipped and counted in status output.
 
 ## 12. Data Storage
 
@@ -522,14 +512,24 @@ Legacy `codebase_*` tool aliases and `/codebase-*` commands are intentionally no
 
 The project should be packaged as a Pi extension/package.
 
+Architecture boundary:
+
+- `src/core/` owns product logic: repo detection, approval, DB paths, indexing, search, context building, and structured result objects.
+- `src/core/` must stay independent of Pi extension APIs: no `ExtensionAPI`, `ctx`, `pi`, Slash-command parsing, tool rendering, or `console.log()` output behavior.
+- `src/pi-extension/` is the Pi adapter layer: tool/command registration, TypeBox schemas, prompt snippets/guidelines, command parsing, UI notifications, and TUI rendering.
+- Future adapters, especially `src/cli/`, should call the same core APIs instead of duplicating status/index/search/context behavior.
+- Core state and execution context should be injectable where practical (`cwd`, and later an optional `stateDir`) so a future CLI can choose output/state behavior without changing product logic.
+- The root `index.ts` remains a thin package entrypoint shim for the Pi manifest.
+
 Current structure:
 
 ```text
 pi-ext-codemap/
   README.md
-  PRD.md
   index.ts
   docs/
+    PRD.md
+    qmd-research.md
     roadmap.md
     search-quality.md
     archive/brainstorming.md
@@ -576,6 +576,7 @@ V1 is successful if:
 ## 19. Implementation Decisions
 
 - Build a Pi extension/package with four V1 tools: status, index, search, and context.
+- Keep the core product logic Pi-API-free and expose Pi tools/commands as adapters over shared core functions.
 - Keep V1 local-only, on-demand, and explicitly approved per repository.
 - Use a global registry plus one SQLite database per approved repo.
 - Use Node.js `node:sqlite` `DatabaseSync` with raw SQL migrations; do not introduce Prisma or an ORM.
@@ -601,25 +602,11 @@ V1 is successful if:
 - Safety tests should verify unapproved repos cannot be indexed and paths outside the repo root are rejected.
 - Package/integration tests should verify the Pi extension loads and each V1 tool validates inputs and returns the documented contract.
 
-## 21. MVP Build Order
+## 21. Delivery Planning
 
-1. README + product docs
-2. Package skeleton + Pi extension loads
-3. Registry + per-repo DB path handling
-4. SQLite schema + migrations
-5. Scanner with approval/ignore/safety rules
-6. Hash/mtime incremental indexing
-7. Chunker for code/Markdown/text
-8. FTS5 tables and indexing
-9. `codemap_status`
-10. `codemap_index`
-11. `codemap_search`
-12. `codemap_context`
-13. Minimal symbol extraction
-14. Tests/docs heuristics
-15. Optional V1.5 features
+Historical MVP build order, future work, and deferred questions live in [`roadmap.md`](roadmap.md). This PRD records the current V1 product contract only.
 
-## 22. Resolved Defaults and Deferred Questions
+## 22. Resolved Defaults
 
 Resolved V1 defaults:
 
@@ -631,9 +618,4 @@ Resolved V1 defaults:
 - Symlinks are not followed.
 - Embeddings are not part of V1.
 
-Deferred questions:
-
-- Which optional embedding adapter should be tried first?
-- How far should cheap symbol extraction go before using optional `ast-grep`?
-- Which graph/test/doc relationships are useful enough for V1.5/V2?
-- Should refresh automation be implemented as an explicit command, hook, or remain manual-only?
+Deferred questions are tracked in [`roadmap.md`](roadmap.md#deferred-questions).

@@ -122,7 +122,7 @@ CodeMap non-destructively migrates existing `~/.pi/agent/codemap/` or `~/.pi/age
 
 ## Documentation map
 
-- [`PRD.md`](PRD.md) — product contract, safety rules, data model, and implementation decisions.
+- [`docs/PRD.md`](docs/PRD.md) — product contract, safety rules, data model, and implementation decisions.
 - [`docs/roadmap.md`](docs/roadmap.md) — planned/non-V1 ideas.
 - [`docs/search-quality.md`](docs/search-quality.md) — maintainer notes for ranking/search-quality benchmark usage.
 - [`docs/qmd-research.md`](docs/qmd-research.md) — prior-art notes from `tobi/qmd` and implications for chunking, vector search, models, and lightweight defaults.

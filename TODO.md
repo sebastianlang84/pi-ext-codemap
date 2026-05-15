@@ -2,8 +2,29 @@
 
 ## Backlog
 
-- [ ] Statuszeile für nicht indexierte Repos verbessern: eigenen Zustand anzeigen (weder Haken noch X), z.B. „CodeMap ○“ / „not indexed“.
-- [ ] Prompt-Injections der Extension optimieren: `promptSnippet`/`promptGuidelines` prüfen, kürzen, präzisieren und gegen Kontext-Bloat absichern.
+Priorisierte Details stehen in [`docs/roadmap.md`](docs/roadmap.md#prioritized-next-steps). Arbeitsregel: Vor jedem Punkt kurz Scope, Benefit und ersten TDD-Test klären; ohne klaren Benefit wird der Punkt gestrichen oder vertagt.
+
+1. [x] Nicht-indexierte Repos neutral anzeigen.
+   - Benefit: Nutzer/Agenten sehen „noch nicht bereit“ statt falschem Erfolg/Fehler.
+   - Test: unapproved/unindexed Repo liefert neutralen Session-Status.
+2. [ ] `cwd`/`stateDir` als Core-Seam absichern.
+   - Benefit: Core bleibt testbar und künftige CLI/Adapter müssen keine State-Logik duplizieren.
+   - Test: temp `stateDir` isoliert Registry und Index-DBs.
+3. [ ] Prompt-Surface der Adapter kürzen.
+   - Benefit: weniger Kontext-Bloat bei gleicher Tool-Führung.
+   - Test: registrierte Snippets/Guidelines bleiben vollständig, aber unter Budget.
+4. [ ] `codemapContext` Locality verbessern.
+   - Benefit: bessere Read-first-Pakete mit passenden Tests/Docs, weniger manuelles Suchen.
+   - Test: nested Fixture liefert Ziel, sibling Tests/Docs und respektiert `pathPrefix`.
+5. [ ] Chunking für Markdown/Fences und Code-Struktur verbessern.
+   - Benefit: stabilere, lesbarere Snippets mit besseren Line-Ranges.
+   - Test: fenced code wird nicht gesplittet; Funktions-/Klassenbereiche bleiben stabil.
+6. [ ] Ranking-/Explain-Guardrails hinzufügen.
+   - Benefit: Ranking-Änderungen werden nachvollziehbar, bevor schwerere Suche gebaut wird.
+   - Test: Top-Ergebnisse erklären Path/Symbol/FTS/Doc/Test-Signale.
+7. [ ] Search-Quality-Gates erweitern.
+   - Benefit: echte Regressionen bei Entry-Points, Tests/Docs und Lockfile-Noise fallen früh auf.
+   - Test: `bench:search-quality:gate` enthält neue repräsentative Fälle.
 
 ## Review-Funde vom TDD-Review
 

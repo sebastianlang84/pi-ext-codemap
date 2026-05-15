@@ -1,6 +1,6 @@
 # pi-ext-codemap Brainstorming
 
-> Historical archive: this note preserves the original idea exploration and is no longer authoritative. Use `README.md`, `PRD.md`, and `docs/roadmap.md` for the current product contract and future-work list.
+> Historical archive: this note preserves the original idea exploration and is no longer authoritative. Use [`../../README.md`](../../README.md), [`../PRD.md`](../PRD.md), and [`../roadmap.md`](../roadmap.md) for the current product contract and future-work list.
 
 ## Ausgangsidee
 
