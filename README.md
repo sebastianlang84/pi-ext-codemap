@@ -1,6 +1,8 @@
 # CodeMap
 
-CodeMap is a local SQLite/FTS codebase index for Pi coding agents. It helps an agent quickly find relevant files, symbols, chunks, tests, and docs before reading or editing a repository.
+**A lightweight local map of a repository for Pi coding agents.**
+
+CodeMap indexes code and plain-text project files into a local SQLite/FTS database so an agent can quickly find relevant files, symbols, chunks, tests, docs, and config before reading or editing. It is designed to be notebook-friendly by default: no daemon, no remote service, no mandatory embeddings, and no model downloads in the normal path.
 
 It complements `pi-memory`:
 
@@ -8,6 +10,17 @@ It complements `pi-memory`:
 pi-memory stores durable decisions and handoffs.
 CodeMap indexes the current repo state and can be rebuilt.
 ```
+
+## Why CodeMap exists
+
+Agents are better at code changes when they first know where to look. CodeMap gives Pi agents a rebuildable, local repo map with line ranges and search signals, without turning every lookup into an LLM or vector-search problem.
+
+Use CodeMap when you need to answer questions like:
+
+- Where is this feature, symbol, endpoint, script, or config defined?
+- Which files should be read first before editing?
+- Which related tests or docs should be checked?
+- Is the local index fresh enough to trust?
 
 ## What CodeMap does
 
@@ -31,6 +44,7 @@ Re-indexing is incremental: unchanged files are skipped, changed files are refre
 | Capability | Status |
 |---|---|
 | Approve and index the current Git repo locally | Implemented |
+| Search code plus Markdown/YAML/JSON/TOML/plain project files | Implemented |
 | Search paths, chunks, and cheap symbols with SQLite FTS5 | Implemented |
 | Return line-bounded snippets with ranking scores | Implemented |
 | Return read-first context for a file, symbol, feature, or query | Implemented |
@@ -111,6 +125,7 @@ CodeMap non-destructively migrates existing `~/.pi/agent/codemap/` or `~/.pi/age
 - [`PRD.md`](PRD.md) — product contract, safety rules, data model, and implementation decisions.
 - [`docs/roadmap.md`](docs/roadmap.md) — planned/non-V1 ideas.
 - [`docs/search-quality.md`](docs/search-quality.md) — maintainer notes for ranking/search-quality benchmark usage.
+- [`docs/qmd-research.md`](docs/qmd-research.md) — prior-art notes from `tobi/qmd` and implications for chunking, vector search, models, and lightweight defaults.
 - [`docs/archive/brainstorming.md`](docs/archive/brainstorming.md) — original historical brainstorming note, no longer authoritative.
 
 ## License

@@ -1,7 +1,7 @@
 {
   "name": "pi-ext-codemap",
   "version": "0.5.0",
-  "description": "CodeMap: local SQLite/FTS codebase index, search, and context tools for Pi coding agents.",
+  "description": "Lightweight local SQLite/FTS repo map for Pi coding agents: code, docs, config search, and read-first context.",
   "type": "module",
   "keywords": [
     "pi-package",

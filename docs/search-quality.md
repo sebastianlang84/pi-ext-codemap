@@ -107,6 +107,19 @@ Custom numeric thresholds must be present and in range. Supplying any custom gat
 5. Add a natural-language case when a real agent query should have found a specific file.
 6. Only relax thresholds when the benchmark data or case design is wrong.
 
+## Future semantic benchmark track
+
+The default benchmark intentionally stays deterministic and model-free. If CodeMap later evaluates optional semantic search, keep it as a separate profile rather than mixing it into the default quality gate.
+
+A semantic evaluation should include:
+
+- German and English mixed queries.
+- Code, Markdown docs, YAML/JSON config, memory/decision-style notes, and error-message lookups.
+- Candidate stacks such as BM25 only, BM25 + `embeddinggemma-300M`, BM25 + `multilingual-e5-small`, BM25 + `Qwen3-Embedding-0.6B`, and optional reranker variants.
+- Additional runtime metrics: cold/warm latency, peak RAM, index size, re-embedding time, model download size, and semantic false positives.
+
+Do not promote an embedder or reranker to a default path unless it beats the lexical baseline on the local corpus without unacceptable compute or reliability cost.
+
 ## Current limitations
 
 - Structural ground truth depends on optional `ast-grep`; without it, only natural cases run.
