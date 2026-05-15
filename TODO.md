@@ -10,7 +10,7 @@ Priorisierte Details stehen in [`docs/roadmap.md`](docs/roadmap.md#prioritized-n
 2. [x] `cwd`/`stateDir` als Core-Seam absichern.
    - Benefit: Core bleibt testbar und künftige CLI/Adapter müssen keine State-Logik duplizieren.
    - Test: temp `stateDir` isoliert Registry und Index-DBs.
-3. [ ] Prompt-Surface der Adapter kürzen.
+3. [x] Prompt-Surface der Adapter kürzen.
    - Benefit: weniger Kontext-Bloat bei gleicher Tool-Führung.
    - Test: registrierte Snippets/Guidelines bleiben vollständig, aber unter Budget.
 4. [ ] `codemapContext` Locality verbessern.

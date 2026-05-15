@@ -71,11 +71,11 @@ export const codeMapOperations: readonly CodeMapOperation[] = [
     commandName: "codemap-status",
     description: "Show CodeMap approval and local SQLite index status for the current Git repository. Uses cheap diagnostics unless full=true.",
     commandDescription: "Show CodeMap approval/index status; pass --full for stale diagnostics",
-    promptSnippet: "Check CodeMap repo approval, index freshness, and optional subtree diagnostics before relying on indexed context.",
+    promptSnippet: "Check CodeMap approval/index readiness and stale state for cwd.",
     promptGuidelines: [
-      "Use codemap_status when repository approval, index existence, or index freshness is uncertain.",
-      "Use codemap_status with full=true only when stale diagnostics need a full repository scan.",
-      "Use codemap_status pathPrefix for monorepos or focused subtree work.",
+      "Use codemap_status before search/context when approval or index state is unknown.",
+      "Use codemap_status full=true only for stale diagnostics.",
+      "Use codemap_status pathPrefix for monorepos.",
     ],
     parameters: Type.Object({
       full: Type.Optional(Type.Boolean({ description: "Run a full repository scan to report stale index diagnostics." })),
@@ -94,11 +94,11 @@ export const codeMapOperations: readonly CodeMapOperation[] = [
     commandName: "codemap-index",
     description: "Index or refresh the current Git repository for CodeMap. Requires approveRepo=true the first time.",
     commandDescription: "Index current repo for CodeMap; pass --approve-repo the first time",
-    promptSnippet: "Index or refresh the current Git repository for CodeMap after explicit repo approval or when the index is stale.",
+    promptSnippet: "Approve once or refresh the CodeMap index for cwd.",
     promptGuidelines: [
-      "Use codemap_index when codemap_status reports a missing or stale index and indexed navigation is useful.",
-      "Use codemap_index with approveRepo=true only for explicit local-only repository approval.",
-      "Use codemap_index pathPrefix to refresh only the relevant subtree in large repos or monorepos.",
+      "Use codemap_index approveRepo=true only after explicit local approval.",
+      "Use codemap_index when codemap_status says missing or stale.",
+      "Use codemap_index pathPrefix to refresh one subtree.",
     ],
     parameters: Type.Object({
       approveRepo: Type.Optional(Type.Boolean({ description: "Approve this Git repository for local-only indexing." })),
@@ -120,11 +120,11 @@ export const codeMapOperations: readonly CodeMapOperation[] = [
     commandName: "codemap-search",
     description: "Search the CodeMap index using SQLite FTS over paths, chunks, and cheap symbols.",
     commandDescription: "Search the CodeMap index: /codemap-search <query>",
-    promptSnippet: "Search indexed repository paths, chunks, and symbols for feature, file, symbol, or subsystem discovery.",
+    promptSnippet: "Search indexed CodeMap paths, chunks, and symbols by query.",
     promptGuidelines: [
-      "Use codemap_search for repository navigation when the target file, feature, symbol, or subsystem is not already known.",
-      "Use compact natural-language or symbol queries with codemap_search; prefer pathPrefix for monorepos.",
-      "Do not treat codemap_search results as authoritative when the index is stale; refresh or read files directly.",
+      "Use codemap_search for navigation when target path/symbol is unknown.",
+      "Use codemap_search query terms; add pathPrefix in monorepos.",
+      "Treat codemap_search stale warnings as advisory.",
     ],
     parameters: Type.Object({
       query: Type.String({ description: "Feature, symbol, path, or phrase to search for." }),
@@ -149,11 +149,11 @@ export const codeMapOperations: readonly CodeMapOperation[] = [
     commandName: "codemap-context",
     description: "Return a compact read-first context package from CodeMap for an indexed file path or symbol/query.",
     commandDescription: "Get CodeMap read-first context: /codemap-context <path-or-symbol>",
-    promptSnippet: "Get compact read-first context for an indexed file, symbol, feature, or subsystem before reading broader code.",
+    promptSnippet: "Get read-first context from indexed CodeMap files or query matches.",
     promptGuidelines: [
-      "Use codemap_context after locating a likely file, symbol, feature, or subsystem to decide what to read first.",
-      "Use codemap_context for context packaging, not as a substitute for reading source files before editing.",
-      "Use codemap_context pathPrefix to keep read-first context scoped in monorepos.",
+      "Use codemap_context after codemap_search to choose files to read.",
+      "Use codemap_context for read-first hints, not as a read substitute.",
+      "Use codemap_context pathPrefix to scope monorepos.",
     ],
     parameters: Type.Object({
       target: Type.String({ description: "Indexed file path, symbol, subsystem, or phrase." }),

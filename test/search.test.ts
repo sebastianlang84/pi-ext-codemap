@@ -466,7 +466,7 @@ test("session start shows neutral status for an unapproved repo", async (t) => {
   assert.deepEqual(statuses, [{ key: "codemap", text: "CodeMap ○ not indexed" }]);
 });
 
-test("registers only codemap tools", () => {
+test("registers only codemap tools with compact complete prompt guidance", () => {
   const tools: Array<{ name: string; label?: string; description?: string; promptSnippet?: string; promptGuidelines?: string[] }> = [];
   registerCodeMapTools({ registerTool: (tool: { name: string; label?: string; description?: string; promptSnippet?: string; promptGuidelines?: string[] }) => tools.push(tool) } as never);
 
@@ -477,10 +477,22 @@ test("registers only codemap tools", () => {
     "codemap_search",
     "codemap_status",
   ]);
-  for (const name of ["codemap_status", "codemap_index", "codemap_search", "codemap_context"]) {
+  const requiredTerms: Record<string, string[]> = {
+    codemap_status: ["approval", "stale", "full=true", "pathPrefix"],
+    codemap_index: ["approveRepo", "stale", "pathPrefix"],
+    codemap_search: ["indexed", "query", "stale", "pathPrefix"],
+    codemap_context: ["read-first", "indexed", "read substitute", "pathPrefix"],
+  };
+  const promptSurface = tools.map((tool) => [tool.promptSnippet, ...(tool.promptGuidelines ?? [])].join("\n")).join("\n");
+  assert.ok(promptSurface.length <= 1_000, `CodeMap prompt surface should stay compact, got ${promptSurface.length} chars`);
+  for (const name of Object.keys(requiredTerms)) {
     const tool = tools.find((candidate) => candidate.name === name);
     assert.ok(tool?.promptSnippet, `${name} should provide promptSnippet`);
+    assert.ok(tool?.promptGuidelines?.length, `${name} should provide promptGuidelines`);
+    const prompt = [tool?.promptSnippet, ...(tool?.promptGuidelines ?? [])].join("\n");
+    assert.ok(prompt.length <= 260, `${name} prompt guidance should stay compact, got ${prompt.length} chars`);
     assert.ok(tool?.promptGuidelines?.every((guideline) => guideline.includes(name)), `${name} guidelines should name the tool`);
+    for (const term of requiredTerms[name]) assert.ok(prompt.includes(term), `${name} prompt guidance should mention ${term}`);
   }
 });
 
