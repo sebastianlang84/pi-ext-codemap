@@ -44,7 +44,7 @@ const defaultRoots = [
   "/home/wasti/ai_stack/services/newsletter-writer",
   "/home/wasti/dev/autoresearch",
 ];
-const ignoredStructuralNames = new Set(["main"]);
+const ignoredStructuralNames = new Set(["main", "run"]);
 
 const parsed = parseArgs(process.argv.slice(2));
 const roots = parsed.roots.length > 0 ? parsed.roots : defaultRoots.filter(existsSync);
@@ -86,6 +86,7 @@ function parseArgs(args: string[]): ParsedArgs {
     thresholds.minRecallAt5 ??= 1;
     thresholds.minMrrAt5 ??= 0.85;
     thresholds.failOnMisses ??= true;
+    thresholds.failOnExcludedHits ??= true;
     thresholds.requireCases ??= true;
   };
 
@@ -211,29 +212,38 @@ function naturalCasesFor(searchRoot: string, indexRoot: string): SearchCase[] {
   const root = searchRoot;
   const lower = searchRoot.toLowerCase();
   const toIndexedPath = (path: string) => relative(indexRoot, `${searchRoot}/${path}`).split("\\").join("/");
-  const toCases = (items: Array<{ query: string; expectedPath?: string; expectedPaths?: string[] }>) => items
-    .map((item) => ({ query: item.query, expectedPaths: item.expectedPaths ?? (item.expectedPath ? [item.expectedPath] : []) }))
-    .map((item) => ({ ...item, expectedPaths: item.expectedPaths.filter((path) => existsSync(`${root}/${path}`)).map(toIndexedPath) }))
+  const toCases = (items: Array<{ query: string; expectedPath?: string; expectedPaths?: string[]; excludedPaths?: string[] }>) => items
+    .map((item) => ({
+      query: item.query,
+      expectedPaths: item.expectedPaths ?? (item.expectedPath ? [item.expectedPath] : []),
+      excludedPaths: item.excludedPaths,
+    }))
+    .map((item) => ({
+      ...item,
+      expectedPaths: item.expectedPaths.filter((path) => existsSync(`${root}/${path}`)).map(toIndexedPath),
+      excludedPaths: item.excludedPaths?.filter((path) => existsSync(`${root}/${path}`)).map(toIndexedPath),
+    }))
     .filter((item) => item.expectedPaths.length > 0);
+  const generic = genericRepoShapeCases(root, toCases);
   if (lower.includes("macrolens")) {
-    return toCases([
+    return [...generic, ...toCases([
       { query: "declarative macro signal rules thresholds inputs", expectedPath: "apps/web/src/lib/macro-signal-rules.ts" },
       { query: "derived RSI consensus divergences history", expectedPath: "apps/web/src/lib/series-analysis.ts" },
       { query: "GET api newsletter macro snapshot endpoint", expectedPath: "apps/web/src/app/api/newsletter/macro/route.ts" },
       { query: "MacroLens newsletter macro data integration plan", expectedPath: "docs/plans/20260502-newsletter-macro-data-integration.md" },
-    ]);
+    ])];
   }
   if (lower.includes("newsletter")) {
-    return toCases([
+    return [...generic, ...toCases([
       { query: "optional MacroLens context GET api newsletter macro", expectedPath: "src/newsletter_writer/macrolens.py" },
       { query: "freshness gate evaluation matrix aggregator", expectedPath: "src/newsletter_writer/aggregator.py" },
       { query: "telegram delivery log host lock", expectedPath: "src/newsletter_writer/delivery.py" },
       { query: "audit revise newsletter risk tracker draft", expectedPath: "src/newsletter_writer/auditor.py" },
       { query: "orchestrator run newsletter pipeline", expectedPath: "src/newsletter_writer/main.py" },
-    ]);
+    ])];
   }
   if (lower.includes("autoresearch")) {
-    return toCases([
+    return [...generic, ...toCases([
       { query: "what is this project about?", expectedPath: "README.md" },
       { query: "where are agent instructions?", expectedPath: "program.md" },
       { query: "what file should the agent edit?", expectedPaths: ["README.md", "program.md", "train.py"] },
@@ -244,9 +254,28 @@ function naturalCasesFor(searchRoot: string, indexRoot: string): SearchCase[] {
       { query: "where is model architecture defined?", expectedPath: "train.py" },
       { query: "where is data preparation?", expectedPath: "prepare.py" },
       { query: "where are dependencies declared?", expectedPath: "pyproject.toml" },
-    ]);
+    ])];
   }
-  return [];
+  return generic;
+}
+
+function genericRepoShapeCases(
+  root: string,
+  toCases: (items: Array<{ query: string; expectedPath?: string; expectedPaths?: string[]; excludedPaths?: string[] }>) => SearchCase[],
+): SearchCase[] {
+  const firstExisting = (paths: string[]) => paths.find((path) => existsSync(`${root}/${path}`));
+  const generatedCandidates = ["dist/index.js", "dist/bundle.js", "build/index.js", "build/bundle.js"];
+  const lockfileCandidates = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"];
+  const entrypoint = firstExisting(["src/index.ts", "src/index.tsx", "src/index.js", "index.ts", "index.js", "main.py", "train.py"]);
+  const testFile = firstExisting(["tests/index.test.ts", "test/index.test.ts", "src/index.test.ts", "tests/test_main.py", "test_main.py"]);
+  const docFile = firstExisting(["README.md", "docs/index.md", "docs/README.md", "docs/architecture.md"]);
+
+  return toCases([
+    ...(entrypoint ? [{ query: entrypoint, expectedPath: entrypoint, excludedPaths: generatedCandidates }] : []),
+    ...(testFile ? [{ query: testFile, expectedPath: testFile }] : []),
+    ...(docFile ? [{ query: docFile, expectedPath: docFile }] : []),
+    ...(existsSync(`${root}/package.json`) ? [{ query: "package.json dependencies", expectedPath: "package.json", excludedPaths: lockfileCandidates }] : []),
+  ]);
 }
 
 function scoreCases(root: string, cases: SearchCase[], pathPrefix = ""): Metrics {

@@ -157,6 +157,17 @@ test("search quality metrics report top1, recall, MRR, misses, and partial misse
   ]);
 });
 
+test("search quality metrics can fail gates on excluded noise hits", () => {
+  const metrics = scoreSearchQualityCases([
+    { query: "dependencies", expectedPaths: ["package.json"], excludedPaths: ["package-lock.json"] },
+  ], () => ["package-lock.json", "package.json"]);
+
+  assert.deepEqual(metrics.excludedHits, [{ query: "dependencies", excludedPaths: ["package-lock.json"], actual: ["package-lock.json", "package.json"] }]);
+  assert.deepEqual(evaluateSearchQualityGate(metrics, { failOnExcludedHits: true }, "noise").issues, [
+    { label: "noise", metric: "excludedHits", expected: "0", actual: 1 },
+  ]);
+});
+
 test("search quality metrics reject cases without expected paths", () => {
   assert.throws(
     () => scoreSearchQualityCases([{ query: "empty", expectedPaths: [] }], () => []),
@@ -202,6 +213,29 @@ test("search quality gates report threshold failures", () => {
     ["fixture", "p95LatencyMs", "<= 25", 42],
     ["fixture", "partialMisses", "0", 1],
   ]);
+});
+
+test("bench search-quality gate includes generic repo-shape regression cases", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-bench-gate-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src"), { recursive: true });
+  mkdirSync(join(root, "tests"), { recursive: true });
+  mkdirSync(join(root, "docs"), { recursive: true });
+  mkdirSync(join(root, "dist"), { recursive: true });
+
+  writeFileSync(join(root, "src", "index.ts"), "export const appEntrypoint = 'main implementation entrypoint generated bundle noise';\n");
+  writeFileSync(join(root, "tests", "index.test.ts"), "test('entrypoint behavior', () => appEntrypoint);\n");
+  writeFileSync(join(root, "docs", "index.md"), "# Entrypoint documentation\n\nRelated tests and docs describe the app entrypoint.\n");
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "quality-fixture", dependencies: { typebox: "1.0.0" } }, null, 2));
+  writeFileSync(join(root, "package-lock.json"), JSON.stringify({ name: "quality-fixture", packages: {} }, null, 2));
+  writeFileSync(join(root, "dist", "index.js"), "console.log('main implementation entrypoint generated bundle noise');\n");
+
+  const output = execFileSync(process.execPath, ["--experimental-strip-types", "scripts/bench-search-quality.ts", "--quality-gate", root], { encoding: "utf8" });
+  const report = JSON.parse(output) as { gate: { passed: boolean }; reports: Array<{ natural: { cases: number; excludedHits?: unknown[] } }> };
+  assert.equal(report.gate.passed, true);
+  assert.ok(report.reports[0]?.natural.cases >= 4, JSON.stringify(report.reports[0]?.natural));
+  assert.deepEqual(report.reports[0]?.natural.excludedHits, []);
 });
 
 test("CodeMap search quality is quantifiable against ast-grep structural ground truth", { skip: !astGrepAvailable() && "ast-grep CLI is not installed" }, (t) => {

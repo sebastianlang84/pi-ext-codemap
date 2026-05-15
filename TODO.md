@@ -19,12 +19,11 @@ Priorisierte Details stehen in [`docs/roadmap.md`](docs/roadmap.md#prioritized-n
 5. [x] Chunking für Markdown/Fences und Code-Struktur verbessern.
    - Benefit: stabilere, lesbarere Snippets mit besseren Line-Ranges.
    - Test: fenced code wird nicht gesplittet; Funktions-/Klassenbereiche bleiben stabil.
-6. [ ] Ranking-/Explain-Guardrails hinzufügen.
-   - Benefit: Ranking-Änderungen werden nachvollziehbar, bevor schwerere Suche gebaut wird.
-   - Test: Top-Ergebnisse erklären Path/Symbol/FTS/Doc/Test-Signale.
-7. [ ] Search-Quality-Gates erweitern.
-   - Benefit: echte Regressionen bei Entry-Points, Tests/Docs und Lockfile-Noise fallen früh auf.
-   - Test: `bench:search-quality:gate` enthält neue repräsentative Fälle.
+6. [x] Ranking-/Explain-Guardrails hinzufügen.
+   - Entscheidung: kein eigenes Explain-Feature; User/API-Surface bleibt schlank, Guardrails laufen über Search-Quality-Gates.
+7. [x] Search-Quality-Gates erweitern.
+   - Benefit: echte Regressionen bei Entry-Points, Tests/Docs und Lockfile-/Generated-Noise fallen früh auf.
+   - Test: `bench:search-quality:gate` enthält neue repräsentative Fälle und excluded-noise Checks.
 
 ## Review-Funde vom TDD-Review
 

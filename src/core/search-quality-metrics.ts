@@ -1,6 +1,7 @@
 export interface SearchQualityCase {
   query: string;
   expectedPaths: string[];
+  excludedPaths?: string[];
 }
 
 export interface SearchQualityMetrics {
@@ -13,6 +14,7 @@ export interface SearchQualityMetrics {
   p95LatencyMs: number;
   misses: Array<{ query: string; expectedPaths: string[]; actual: string[] }>;
   partialMisses: Array<{ query: string; expectedPaths: string[]; missingExpectedPaths: string[]; actual: string[] }>;
+  excludedHits?: Array<{ query: string; excludedPaths: string[]; actual: string[] }>;
 }
 
 export interface SearchQualityThresholds {
@@ -23,12 +25,13 @@ export interface SearchQualityThresholds {
   maxP95LatencyMs?: number;
   failOnMisses?: boolean;
   failOnPartialMisses?: boolean;
+  failOnExcludedHits?: boolean;
   requireCases?: boolean;
 }
 
 export interface SearchQualityGateIssue {
   label: string;
-  metric: keyof SearchQualityMetrics | "misses" | "partialMisses";
+  metric: keyof SearchQualityMetrics | "misses" | "partialMisses" | "excludedHits";
   expected: string;
   actual: number;
 }
@@ -39,7 +42,7 @@ export interface SearchQualityGateResult {
 }
 
 export function emptySearchQualityMetrics(): SearchQualityMetrics {
-  return { cases: 0, top1Accuracy: 0, recallAt5: 0, expectedCoverageAt5: 0, mrrAt5: 0, avgLatencyMs: 0, p95LatencyMs: 0, misses: [], partialMisses: [] };
+  return { cases: 0, top1Accuracy: 0, recallAt5: 0, expectedCoverageAt5: 0, mrrAt5: 0, avgLatencyMs: 0, p95LatencyMs: 0, misses: [], partialMisses: [], excludedHits: [] };
 }
 
 export function scoreSearchQualityCases(
@@ -58,6 +61,7 @@ export function scoreSearchQualityCases(
   const latencies: number[] = [];
   const misses: SearchQualityMetrics["misses"] = [];
   const partialMisses: SearchQualityMetrics["partialMisses"] = [];
+  const excludedHits: NonNullable<SearchQualityMetrics["excludedHits"]> = [];
 
   for (const item of cases) {
     const start = now();
@@ -77,6 +81,8 @@ export function scoreSearchQualityCases(
     if (missingExpectedPaths.length > 0) {
       partialMisses.push({ query: item.query, expectedPaths: item.expectedPaths, missingExpectedPaths, actual: paths });
     }
+    const excludedPathHits = (item.excludedPaths ?? []).filter((path) => paths.includes(path));
+    if (excludedPathHits.length > 0) excludedHits.push({ query: item.query, excludedPaths: excludedPathHits, actual: paths });
   }
 
   latencies.sort((a, b) => a - b);
@@ -90,6 +96,7 @@ export function scoreSearchQualityCases(
     p95LatencyMs: round(latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95))] ?? 0),
     misses,
     partialMisses,
+    excludedHits,
   };
 }
 
@@ -117,6 +124,10 @@ export function evaluateSearchQualityGate(
   }
   if (thresholds.failOnPartialMisses === true && metrics.partialMisses.length > 0) {
     issues.push({ label, metric: "partialMisses", expected: "0", actual: metrics.partialMisses.length });
+  }
+  const excludedHitCount = metrics.excludedHits?.length ?? 0;
+  if (thresholds.failOnExcludedHits === true && excludedHitCount > 0) {
+    issues.push({ label, metric: "excludedHits", expected: "0", actual: excludedHitCount });
   }
 
   return { passed: issues.length === 0, issues };
