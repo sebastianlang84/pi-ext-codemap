@@ -27,12 +27,12 @@ export function status(cwd = process.cwd(), options: { health?: "cheap" | "full"
   const pathPrefix = normalizePathPrefix(options.pathPrefix);
   const info = getRepoInfo(cwd);
   if (!info.approved) {
-    return { ...info, indexed: false, files: 0, chunks: 0, symbols: 0, lastIndexedAt: null, health: healthMode, stale: false, changed: 0, missing: 0, deleted: 0, warnings: [] };
+    return { ...info, readiness: "not_approved", indexed: false, files: 0, chunks: 0, symbols: 0, lastIndexedAt: null, health: healthMode, stale: false, changed: 0, missing: 0, deleted: 0, warnings: [] };
   }
   const db = openRepoDb(info.dbPath);
   try {
     const counts = readIndexStatusCounts(db, pathPrefix);
-    const base = { ...info, ...counts, health: healthMode, pathPrefix };
+    const base = { ...info, ...counts, readiness: counts.indexed ? "ready" : "not_indexed", health: healthMode, pathPrefix };
     return { ...base, ...(healthMode === "cheap" ? cheapIndexHealth() : fullIndexHealth(db, info.root, pathPrefix)) };
   } finally {
     db.close();

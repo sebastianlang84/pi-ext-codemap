@@ -17,6 +17,7 @@ const { codemapContext } = await import("../src/core/context.ts");
 const { getRepoInfo } = await import("../src/core/repo.ts");
 const { registerCodeMapTools } = await import("../src/pi-extension/tools.ts");
 const { registerCodeMapCommands } = await import("../src/pi-extension/commands.ts");
+const { default: codeMapExtension } = await import("../src/pi-extension/index.ts");
 
 function fixtureRepo(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-test-"));
@@ -341,6 +342,18 @@ export function changedUserFlow(id: string) {
   assert.deepEqual(searchCodeMap({ cwd: root, query: "404", limit: 5 }), []);
 });
 
+test("status reports unapproved repos as not ready", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-unapproved-status-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+
+  const result = status(root, { health: "cheap" });
+
+  assert.equal(result.approved, false);
+  assert.equal(result.indexed, false);
+  assert.equal(result.readiness, "not_approved");
+});
+
 test("cheap status avoids stale scan while full status reports drift", (t) => {
   const root = fixtureRepo(t);
   writeFileSync(join(root, "src", "core", "cheap-status-added.ts"), `
@@ -386,6 +399,32 @@ test("CodeMap uses state storage and migrates legacy repo DBs", (t) => {
   assert.match(migrated.dbPath, /\.pi\/agent\/state\/codemap\/repos\//);
   assert.ok(existsSync(join(legacyHome, ".pi", "agent", "state", "codemap", "registry.sqlite")));
   assert.ok(existsSync(migrated.dbPath));
+});
+
+test("session start shows neutral status for an unapproved repo", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-unapproved-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+
+  let sessionStart: ((event: unknown, ctx: { hasUI: boolean; ui: { setStatus: (key: string, text: string) => void } }) => Promise<void>) | undefined;
+  const statuses: Array<{ key: string; text: string }> = [];
+  codeMapExtension({
+    on(name: string, handler: typeof sessionStart) {
+      if (name === "session_start") sessionStart = handler;
+    },
+    registerTool() {},
+    registerCommand() {},
+  } as never);
+
+  const cwd = process.cwd();
+  try {
+    process.chdir(root);
+    await sessionStart?.({}, { hasUI: true, ui: { setStatus: (key, text) => statuses.push({ key, text }) } });
+  } finally {
+    process.chdir(cwd);
+  }
+
+  assert.deepEqual(statuses, [{ key: "codemap", text: "CodeMap ○ not indexed" }]);
 });
 
 test("registers only codemap tools", () => {
