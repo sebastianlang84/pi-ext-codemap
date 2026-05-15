@@ -9,10 +9,10 @@
 - Keep lockfile/generated/build/minified neighbors out of read-first context while preserving useful related tests/docs.
 - Add internal ranking diagnostics for tests and benchmarks without adding public `codemap_search` explain fields.
 - Add Git-aware full status diagnostics for current/indexed HEAD, dirty working trees, dirty file lists, and path-scoped last-index metadata.
-- Harden ranking roles and noise penalties so source/config/docs/tests beat generated/build/vendor/minified/large-JSON noise unless noisy files are explicitly requested.
+- Harden ranking roles and noise penalties so source/config/docs/tests beat generated/build/vendor/minified/large-JSON noise unless noisy paths/files are explicitly requested.
 - Add a token-injection budget report and test gate for registered CodeMap Pi tools.
 - Make the search-quality gate deterministic by defaulting it to checked-in fixtures and moving private local real-repo benchmarks behind an opt-in local mode.
-- Add symbol, endpoint/route, config-key, and error-message query-class coverage to public search/context tests and the checked-in search-quality fixture.
+- Add symbol, endpoint/route, config-key, error-message, and noisy-query class coverage to public search/context tests and the checked-in search-quality fixture.
 
 ## 0.5.0 - 2026-05-12
 

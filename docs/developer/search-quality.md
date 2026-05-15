@@ -118,7 +118,7 @@ The current product contract is documented in [`../product/PRD.md#12-ranking-and
 
 - Lockfiles are indexed so explicit queries such as `package-lock.json` can find them.
 - Ordinary dependency or phrase queries should prefer source/config/docs/tests and should not include lockfiles in the top results.
-- Generated/build/minified outputs are noisy signals and should not become read-first context neighbors.
+- Generated/build/minified outputs are noisy signals and should not displace source matches or become read-first context neighbors.
 - `codemap_context` should keep lockfile/generated/build/minified import or reverse-import neighbors out of `readFirst` while preserving useful related tests/docs.
 - Ranking diagnostics exist for maintainer/debug paths, but public `codemap_search` results stay compact and do not expose explain fields.
 
@@ -126,6 +126,7 @@ Relevant tests in `test/search.test.ts` include:
 
 - `lockfiles are indexed but only prominent for explicit lockfile queries`
 - `context read-first excludes noisy generated and lockfile neighbors`
+- `noisy queries keep source first and out of read-first neighbors`
 - `ranking diagnostics expose score components without search API explain fields`
 
 ## How to use this when improving CodeMap

@@ -147,8 +147,8 @@ function fileRolePenalty(roles: string[], plan: QueryPlan): number {
   const explicit = explicitNoiseIntents(plan);
   let penalty = 0;
   if (roles.includes("lockfile")) penalty += explicit.lockfile ? 0 : 60;
-  if (roles.includes("generated")) penalty += explicit.generated ? 8 : 24;
-  if (roles.includes("build_output") || roles.includes("minified")) penalty += explicit.buildOutput ? 12 : 36;
+  if (roles.includes("generated")) penalty += explicit.generated ? 8 : 60;
+  if (roles.includes("build_output") || roles.includes("minified")) penalty += explicit.buildOutput ? 12 : 48;
   if (roles.includes("large_json")) penalty += explicit.largeJson ? 12 : 36;
   return penalty;
 }
@@ -157,8 +157,8 @@ function explicitNoiseIntents(plan: QueryPlan): { lockfile: boolean; generated: 
   const text = [plan.normalized, ...plan.terms].join(" ");
   return {
     lockfile: /(?:\blockfile\b|\b(?:package-lock|npm-shrinkwrap)\.json\b|\bpnpm-lock\.ya?ml\b|\byarn\.lock\b|\b\S+\.lock\b)/.test(text),
-    generated: /\b(?:generated|__generated__)\b/.test(text),
-    buildOutput: /(?:^|[/\\])(?:dist|build|vendor)(?:[/\\]|$)|\b(?:build output|bundle|minified)\b|\.min\.[cm]?js\b/.test(text),
+    generated: plan.pathLike && /\b(?:generated|__generated__)\b/.test(text),
+    buildOutput: plan.pathLike && /(?:^|[/\\])(?:dist|build|vendor)(?:[/\\]|$)|\.min\.[cm]?js\b/.test(text),
     largeJson: /(?:\.json\b|\blarge json\b)/.test(text),
   };
 }

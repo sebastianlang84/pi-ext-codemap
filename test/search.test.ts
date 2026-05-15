@@ -347,6 +347,38 @@ test("navigation queries rank source config docs and tests before noisy files", 
   assert.equal(explicitNoise[0]?.path, "data/catalog.json");
 });
 
+test("noisy queries keep source first and out of read-first neighbors", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-noisy-query-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src", "__generated__"), { recursive: true });
+  mkdirSync(join(root, "dist"), { recursive: true });
+
+  writeFileSync(join(root, "src", "noisy-navigation.ts"), `
+export function resolveNoisyNavigation() {
+  return "generated bundle noise root cause source anchor";
+}
+`);
+  writeFileSync(join(root, "src", "__generated__", "noisy-client.ts"), "export const generatedNoisyClient = 'generated bundle noise root cause source anchor';\n");
+  writeFileSync(join(root, "dist", "noisy-navigation.js"), "function resolveNoisyNavigation(){return 'generated bundle noise root cause source anchor';}\n");
+  writeFileSync(join(root, "package-lock.json"), JSON.stringify({ noise: "generated bundle noise root cause source anchor" }, null, 2));
+
+  indexRepo({ cwd: root, approve: true });
+
+  const results = searchCodeMap({ cwd: root, query: "generated bundle noise root cause source anchor", limit: 5 });
+  assert.equal(results[0]?.path, "src/noisy-navigation.ts");
+  assert.ok(results.every((result) => result.path !== "src/__generated__/noisy-client.ts"), JSON.stringify(results.map((result) => result.path)));
+  assert.ok(results.every((result) => result.path !== "dist/noisy-navigation.js"), JSON.stringify(results.map((result) => result.path)));
+  assert.ok(results.every((result) => result.path !== "package-lock.json"), JSON.stringify(results.map((result) => result.path)));
+
+  const contextResult = codemapContext({ cwd: root, target: results[0]?.path ?? "", limit: 4 });
+  const readFirstPaths = contextResult.readFirst.map((item) => item.path);
+  assert.equal(readFirstPaths[0], "src/noisy-navigation.ts");
+  assert.ok(!readFirstPaths.includes("src/__generated__/noisy-client.ts"), JSON.stringify(readFirstPaths));
+  assert.ok(!readFirstPaths.includes("dist/noisy-navigation.js"), JSON.stringify(readFirstPaths));
+  assert.ok(!readFirstPaths.includes("package-lock.json"), JSON.stringify(readFirstPaths));
+});
+
 test("ranking diagnostics expose score components without search API explain fields", (t) => {
   const root = fixtureRepo(t);
   const results = searchCodeMap({ cwd: root, query: "package dependencies leftpad", limit: 5 });

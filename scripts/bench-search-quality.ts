@@ -250,6 +250,7 @@ function naturalCasesFor(searchRoot: string, indexRoot: string): SearchCase[] {
       { query: "GET api newsletter macro snapshot endpoint", expectedPath: "apps/web/src/app/api/newsletter/macro/route.ts", excludedPaths: ["dist/index.js", "dist/bundle.js"] },
       { query: "newsletterMacroSnapshotTtlMs config key", expectedPath: "config/newsletter-macro.json", excludedPaths: ["package-lock.json"] },
       { query: "ERR_NEWSLETTER_SNAPSHOT_STALE macro snapshot stale error", expectedPath: "src/newsletter-snapshot.ts", excludedPaths: ["package-lock.json", "dist/index.js", "dist/bundle.js"] },
+      { query: "generated bundle noise root cause source anchor", expectedPath: "src/noisy-navigation.ts", excludedPaths: ["package-lock.json", "dist/index.js", "dist/bundle.js", "src/__generated__/noisy-client.ts"] },
     ])];
   }
   if (lower.includes("macrolens")) {
