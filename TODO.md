@@ -13,7 +13,7 @@ Priorisierte Details stehen in [`docs/roadmap.md`](docs/roadmap.md#prioritized-n
 3. [x] Prompt-Surface der Adapter kürzen.
    - Benefit: weniger Kontext-Bloat bei gleicher Tool-Führung.
    - Test: registrierte Snippets/Guidelines bleiben vollständig, aber unter Budget.
-4. [ ] `codemapContext` Locality verbessern.
+4. [x] `codemapContext` Locality verbessern.
    - Benefit: bessere Read-first-Pakete mit passenden Tests/Docs, weniger manuelles Suchen.
    - Test: nested Fixture liefert Ziel, sibling Tests/Docs und respektiert `pathPrefix`.
 5. [ ] Chunking für Markdown/Fences und Code-Struktur verbessern.

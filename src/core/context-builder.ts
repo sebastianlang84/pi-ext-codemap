@@ -58,6 +58,7 @@ export function buildCodeMapContext(options: CodeMapContextOptions): CodeMapCont
     const warnings: string[] = [...(diagnostics.warnings ?? [])];
     const readFirst = readFirstItems(db, request, warnings, options.cwd, options.stateDir);
     const related = relatedPaths(db, readFirst.base, request.pathFilter);
+    const items = readFirst.direct ? localReadFirstItems(db, readFirst.items, related.tests, related.docs, request.limit) : readFirst.items;
     const lastIndexedAt = (db.prepare("select value from meta where key='last_indexed_at'").get() as { value: string } | undefined)?.value ?? null;
 
     return {
@@ -69,7 +70,7 @@ export function buildCodeMapContext(options: CodeMapContextOptions): CodeMapCont
       changed: diagnostics.changed ?? 0,
       missing: diagnostics.missing ?? 0,
       deleted: diagnostics.deleted ?? 0,
-      readFirst: readFirst.items,
+      readFirst: items,
       relatedTests: related.tests,
       relatedDocs: related.docs,
       warnings,
@@ -98,7 +99,7 @@ function readFirstItems(
   warnings: string[],
   cwd?: string,
   stateDir?: string,
-): { base: string; items: CodeMapReadFirstItem[] } {
+): { base: string; items: CodeMapReadFirstItem[]; direct: boolean } {
   const file = db.prepare("select id, path, language from files where (path = ? or path like ? escape '\\') and path like ? escape '\\' limit 1")
     .get(request.target, request.targetLike, request.pathFilter) as { id: number; path: string; language: string } | undefined;
 
@@ -107,6 +108,7 @@ function readFirstItems(
     return {
       base: request.target,
       items: searchCodeMap({ query: request.target, cwd, limit: request.limit, pathPrefix: request.pathPrefix, stateDir }),
+      direct: false,
     };
   }
 
@@ -115,7 +117,28 @@ function readFirstItems(
   return {
     base: file.path,
     items: chunks.map((chunk) => ({ path: file.path, language: file.language, ...chunk, snippet: snippet(chunk.text) })),
+    direct: true,
   };
+}
+
+function localReadFirstItems(db: ReturnType<typeof openRepoDb>, targetItems: CodeMapReadFirstItem[], tests: string[], docs: string[], limit: number): CodeMapReadFirstItem[] {
+  const related = [tests[0], docs[0], ...tests.slice(1), ...docs.slice(1)].filter((path): path is string => Boolean(path));
+  if (related.length === 0) return targetItems.slice(0, limit);
+  const relatedItems = related.flatMap((path) => firstChunkForPath(db, path));
+  const items = targetItems.length > 0 ? [targetItems[0]] : [];
+  items.push(...relatedItems.slice(0, Math.max(0, limit - items.length)));
+  if (items.length < limit) items.push(...targetItems.slice(1, limit - items.length + 1));
+  return items.slice(0, limit);
+}
+
+function firstChunkForPath(db: ReturnType<typeof openRepoDb>, path: string): CodeMapReadFirstChunk[] {
+  const row = db.prepare(`
+    select f.path, f.language, c.start_line as startLine, c.end_line as endLine, c.kind, c.text
+    from files f join chunks c on c.file_id = f.id
+    where f.path = ?
+    order by c.ordinal limit 1
+  `).get(path) as ({ path: string; language: string; startLine: number; endLine: number; kind: string; text: string } | undefined);
+  return row ? [{ ...row, snippet: snippet(row.text) }] : [];
 }
 
 function relatedPaths(db: ReturnType<typeof openRepoDb>, base: string, pathFilter: string): { tests: string[]; docs: string[] } {
@@ -125,14 +148,31 @@ function relatedPaths(db: ReturnType<typeof openRepoDb>, base: string, pathFilte
   const relatedTests = db.prepare(`
     select path from files
     where (path like '%test%' or path like '%spec%') and (path like ? escape '\\' or path like ? escape '\\') and path like ? escape '\\'
-    order by path limit 8
+    order by path
   `).all(stemLike, baseLike, pathFilter) as Array<{ path: string }>;
   const relatedDocs = db.prepare(`
     select path from files
     where language = 'markdown' and (path like ? escape '\\' or path like ? escape '\\') and path like ? escape '\\'
-    order by path limit 8
+    order by path
   `).all(stemLike, baseLike, pathFilter) as Array<{ path: string }>;
-  return { tests: relatedTests.map((r) => r.path), docs: relatedDocs.map((r) => r.path) };
+  return {
+    tests: sortByLocality(base, relatedTests.map((r) => r.path)).slice(0, 8),
+    docs: sortByLocality(base, relatedDocs.map((r) => r.path)).slice(0, 8),
+  };
+}
+
+function sortByLocality(base: string, paths: string[]): string[] {
+  return paths.filter((path) => path !== base).sort((left, right) => localityScore(base, right) - localityScore(base, left) || left.localeCompare(right));
+}
+
+function localityScore(base: string, path: string): number {
+  const baseDir = base.split("/").slice(0, -1);
+  const pathDir = path.split("/").slice(0, -1);
+  let shared = 0;
+  while (shared < baseDir.length && shared < pathDir.length && baseDir[shared] === pathDir[shared]) shared++;
+  const sameDir = baseDir.length === pathDir.length && shared === baseDir.length;
+  const depthPenalty = Math.abs(baseDir.length - pathDir.length);
+  return shared * 10 + (sameDir ? 5 : 0) - depthPenalty;
 }
 
 function escapeLike(value: string): string {

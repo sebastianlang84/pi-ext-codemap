@@ -211,6 +211,46 @@ test("context packages direct files with related tests and docs", (t) => {
   assert.deepEqual(result.warnings, []);
 });
 
+test("context read-first locality includes nested sibling tests and docs within pathPrefix", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-context-locality-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "packages", "billing", "src"), { recursive: true });
+  mkdirSync(join(root, "packages", "billing", "docs"), { recursive: true });
+  mkdirSync(join(root, "packages", "billing", "legacy"), { recursive: true });
+  mkdirSync(join(root, "packages", "web", "src"), { recursive: true });
+  mkdirSync(join(root, "packages", "web", "docs"), { recursive: true });
+
+  writeFileSync(join(root, "packages", "billing", "src", "invoice-service.ts"), `${Array.from({ length: 90 }, (_, index) => `export const invoiceLine${index} = ${index};`).join("\n")}\n`);
+  writeFileSync(join(root, "packages", "billing", "src", "invoice-service.test.ts"), "import './invoice-service';\n");
+  writeFileSync(join(root, "packages", "billing", "docs", "invoice-service.md"), "# Invoice service\n\nBilling invoice docs.\n");
+  writeFileSync(join(root, "packages", "billing", "legacy", "invoice-service.test.ts"), "import '../src/invoice-service';\n");
+  writeFileSync(join(root, "packages", "web", "src", "invoice-service.test.ts"), "import './invoice-service';\n");
+  writeFileSync(join(root, "packages", "web", "docs", "invoice-service.md"), "# Web invoice docs\n");
+  indexRepo({ cwd: root, approve: true });
+
+  const result = codemapContext({ cwd: root, target: "invoice-service.ts", pathPrefix: "packages/billing", limit: 6 });
+  const readFirstPaths = [...new Set(result.readFirst.map((item) => item.path))];
+
+  assert.deepEqual(result.readFirst.slice(0, 3).map((item) => item.path), [
+    "packages/billing/src/invoice-service.ts",
+    "packages/billing/src/invoice-service.test.ts",
+    "packages/billing/docs/invoice-service.md",
+  ]);
+  assert.deepEqual(readFirstPaths.slice(0, 3), [
+    "packages/billing/src/invoice-service.ts",
+    "packages/billing/src/invoice-service.test.ts",
+    "packages/billing/docs/invoice-service.md",
+  ]);
+  assert.deepEqual(result.relatedTests, [
+    "packages/billing/src/invoice-service.test.ts",
+    "packages/billing/legacy/invoice-service.test.ts",
+  ]);
+  assert.deepEqual(result.relatedDocs, ["packages/billing/docs/invoice-service.md"]);
+  assert.ok(result.readFirst.every((item) => item.path.startsWith("packages/billing/")));
+  assert.deepEqual(result.warnings, []);
+});
+
 test("safety skips secrets, generated files, heavy directories, binary files, large files, and symlinks", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-safety-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
