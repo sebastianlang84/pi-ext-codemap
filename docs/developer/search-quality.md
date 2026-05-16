@@ -62,7 +62,7 @@ For checked-in fixtures and known local repos, the benchmark includes hand-writt
 - `where are dependencies declared?` → `pyproject.toml`
 - `freshness gate evaluation matrix aggregator` → newsletter aggregator code
 
-Natural cases can have multiple expected paths when a good answer should include several files.
+Natural cases can have multiple expected paths when a good answer should include several files or when a generic repo-shape query has several valid targets, such as root and workspace `package.json` manifests.
 
 ## Metrics
 
@@ -136,7 +136,7 @@ Relevant tests in `test/search.test.ts` include:
 3. Re-run the same gate command.
 4. Inspect `misses`, `partialMisses`, and `excludedHits` first; then inspect Top-1/MRR shifts.
 5. Add a natural-language case when a real agent query should have found a specific file or avoided a known noise file.
-6. Only relax thresholds when the benchmark data or case design is wrong.
+6. Correct expected paths only when the query is genuinely ambiguous or multi-target; do not relax thresholds after seeing a worse score.
 
 ## Future semantic benchmark track
 

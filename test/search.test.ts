@@ -405,6 +405,56 @@ test("ranking diagnostics expose score components without search API explain fie
   assert.ok(diagnostics.noisePenalty >= 60, JSON.stringify(diagnostics));
 });
 
+test("natural module queries rank exact basename files above sibling config matches", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-module-query-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src", "newsletter_writer"), { recursive: true });
+
+  writeFileSync(join(root, "src", "newsletter_writer", "config.py"), `
+class TelegramConfig:
+    delivery_log_path = "telegram delivery log"
+`);
+  writeFileSync(join(root, "src", "newsletter_writer", "delivery.py"), `
+"""Telegram delivery: send newsletter messages via Bot API."""
+
+def send_telegram(text):
+    return text
+`);
+
+  indexRepo({ cwd: root, approve: true });
+
+  const results = searchCodeMap({ cwd: root, query: "telegram delivery log host lock", limit: 5 });
+  assert.equal(results[0]?.path, "src/newsletter_writer/delivery.py", JSON.stringify(results.map((result) => ({ path: result.path, score: result.score }))));
+});
+
+test("ranking gives exact module-name terms enough weight over sibling content matches", () => {
+  const plan = planQuery("telegram delivery log host lock");
+  const moduleDiagnostics = scoreSearchRow({
+    path: "src/newsletter_writer/delivery.py",
+    language: "python",
+    startLine: 1,
+    endLine: 1,
+    kind: "text",
+    text: "send telegram newsletter",
+    rank: 0,
+    symbolName: null,
+  }, plan, 1);
+  const siblingDiagnostics = scoreSearchRow({
+    path: "src/newsletter_writer/config.py",
+    language: "python",
+    startLine: 1,
+    endLine: 1,
+    kind: "text",
+    text: "telegram delivery log host lock settings",
+    rank: 0,
+    symbolName: null,
+  }, plan, 1);
+
+  assert.ok(moduleDiagnostics.filenameScore > siblingDiagnostics.filenameScore, JSON.stringify({ moduleDiagnostics, siblingDiagnostics }));
+  assert.ok(moduleDiagnostics.finalScore > siblingDiagnostics.finalScore, JSON.stringify({ moduleDiagnostics, siblingDiagnostics }));
+});
+
 test("multi-term queries prefer all-term matches over OR fallback", (t) => {
   const root = fixtureRepo(t);
   const results = searchCodeMap({ cwd: root, query: "alpha beta", limit: 5 });

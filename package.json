@@ -17,6 +17,7 @@
     "docs/user/",
     "docs/developer/architecture.md",
     "docs/developer/search-quality.md",
+    "docs/developer/agent-refresh-eval.md",
     "docs/developer/qmd-research.md",
     "docs/archive/brainstorming.md",
     "scripts/",
@@ -37,6 +38,7 @@
     "bench:search-quality": "node --experimental-strip-types scripts/bench-search-quality.ts --fixtures",
     "bench:search-quality:gate": "node --experimental-strip-types scripts/bench-search-quality.ts --quality-gate --fixtures",
     "bench:search-quality:local": "node --experimental-strip-types scripts/bench-search-quality.ts --local-repos",
+    "eval:agent-refresh": "node --experimental-strip-types scripts/eval-agent-refresh.ts",
     "check:token-injection": "node --experimental-strip-types scripts/check-token-injection.ts --budget-gate",
     "audit:lightweight": "node scripts/audit.mjs"
   },

@@ -294,15 +294,18 @@ function genericRepoShapeCases(
   const firstExisting = (paths: string[]) => paths.find((path) => existsSync(`${root}/${path}`));
   const generatedCandidates = ["dist/index.js", "dist/bundle.js", "build/index.js", "build/bundle.js"];
   const lockfileCandidates = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"];
+  const allExisting = (paths: string[]) => paths.filter((path) => existsSync(`${root}/${path}`));
   const entrypoint = firstExisting(["src/index.ts", "src/index.tsx", "src/index.js", "index.ts", "index.js", "main.py", "train.py"]);
   const testFile = firstExisting(["tests/index.test.ts", "test/index.test.ts", "src/index.test.ts", "tests/test_main.py", "test_main.py"]);
-  const docFile = firstExisting(["README.md", "docs/index.md", "docs/README.md", "docs/architecture.md"]);
+  const readmeFiles = allExisting(["README.md", "docs/README.md"]);
+  const docFile = readmeFiles[0] ?? firstExisting(["docs/index.md", "docs/architecture.md"]);
+  const packageFiles = allExisting(["package.json", "apps/web/package.json"]);
 
   return toCases([
     ...(entrypoint ? [{ query: entrypoint, expectedPath: entrypoint, excludedPaths: generatedCandidates }] : []),
     ...(testFile ? [{ query: testFile, expectedPath: testFile }] : []),
-    ...(docFile ? [{ query: docFile, expectedPath: docFile }] : []),
-    ...(existsSync(`${root}/package.json`) ? [{ query: "package.json dependencies", expectedPath: "package.json", excludedPaths: lockfileCandidates }] : []),
+    ...(docFile ? [{ query: docFile, expectedPaths: readmeFiles.length > 0 ? readmeFiles : [docFile] }] : []),
+    ...(packageFiles.length > 0 ? [{ query: "package.json dependencies", expectedPaths: packageFiles, excludedPaths: lockfileCandidates }] : []),
   ]);
 }
 

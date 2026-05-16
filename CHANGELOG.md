@@ -13,6 +13,8 @@
 - Add a token-injection budget report and test gate for registered CodeMap Pi tools.
 - Make the search-quality gate deterministic by defaulting it to checked-in fixtures and moving private local real-repo benchmarks behind an opt-in local mode.
 - Add symbol, endpoint/route, config-key, error-message, and noisy-query class coverage to public search/context tests and the checked-in search-quality fixture.
+- Improve natural-language module-file ranking for exact basename terms and refine generic README/package benchmark ground truth for multi-manifest repos.
+- Add an opt-in Pi JSON-mode agent eval for stale CodeMap refresh behavior and document the initial 6/6 pass, so refresh automation stays deferred for now.
 
 ## 0.5.0 - 2026-05-12
 

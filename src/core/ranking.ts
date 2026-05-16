@@ -59,6 +59,9 @@ export function scoreSearchRow(row: SearchRow, plan: QueryPlan, boost: number): 
   const textCoverage = termCoverage(lowerText, plan.coreTerms);
   const basename = lowerPath.split("/").pop() ?? lowerPath;
   const basenameCoverage = termCoverage(basename, plan.coreTerms);
+  const basenameDepth = lowerPath.split("/").length - 1;
+  const exactFilenameScore = basename === plan.normalized ? Math.max(1, 4 - basenameDepth) : 0;
+  const exactModuleNameScore = exactBasenameStemMatch(basename, plan.coreTerms) ? 8 : 0;
   const codeLike = /\.(?:[cm]?[jt]sx?|py|go|rs|java|rb|php|cs|cpp|c|h|hpp|swift|kt|scala|sh|sql)$/.test(lowerPath);
   const sourceLike = /(^|\/)src\//.test(lowerPath);
   const testLike = /(^|\/)(?:test|tests|__tests__)\//.test(lowerPath) || /(?:^|[._-])test\./.test(basename);
@@ -67,7 +70,7 @@ export function scoreSearchRow(row: SearchRow, plan: QueryPlan, boost: number): 
   const retrievalBoost = boost;
   const ftsScore = rankScore(row.rank);
   const pathScore = (exactPath ? 6 : 0) + (lowerPath.endsWith(plan.normalized) ? 3 : 0) + pathCoverage * 5;
-  const filenameScore = basenameCoverage * 4;
+  const filenameScore = basenameCoverage * 4 + exactFilenameScore + exactModuleNameScore;
   const exactTextScore = exactText ? 4 : 0;
   const symbolScore = (symbolish && exactText ? 3 : 0) + (exactSymbol ? 8 : 0) + (prefixSymbol ? 5 : 0);
   const textCoverageScore = textCoverage * 3;
@@ -161,6 +164,11 @@ function explicitNoiseIntents(plan: QueryPlan): { lockfile: boolean; generated: 
     buildOutput: plan.pathLike && /(?:^|[/\\])(?:dist|build|vendor)(?:[/\\]|$)|\.min\.[cm]?js\b/.test(text),
     largeJson: /(?:\.json\b|\blarge json\b)/.test(text),
   };
+}
+
+function exactBasenameStemMatch(basename: string, terms: string[]): boolean {
+  const stem = basename.replace(/(?:\.[^.]+)+$/, "");
+  return stem.length > 1 && terms.includes(stem);
 }
 
 function termCoverage(text: string, terms: string[]): number {
