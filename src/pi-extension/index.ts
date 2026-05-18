@@ -5,7 +5,7 @@ import { registerCodeMapCommands } from "./commands.ts";
 
 const STATUS_KEY = "codemap";
 const STATUS_OK_TEXT = "CodeMap ✓";
-const STATUS_NOT_INDEXED_TEXT = "CodeMap ○ not indexed";
+const STATUS_NOT_INDEXED_TEXT = "CodeMap ✗";
 const STATUS_ERROR_TEXT = "CodeMap ✗";
 
 export default function codeMapExtension(pi: ExtensionAPI): void {
