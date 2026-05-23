@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { codemapContext } from "../src/core/context.ts";
 import { indexRepo } from "../src/core/indexer.ts";
+import { mergeSearchContextReadPlan } from "../src/core/navigation-read-plan.ts";
 import { searchCodeMap } from "../src/core/search.ts";
 
 interface NavigationTask {
@@ -214,7 +215,7 @@ function navigate(options: { root: string; stateDir: string; mode: NavigationMod
   if (mode === "codemap_search") return searchPaths;
   const contextTarget = searchPaths[0] ?? task.query;
   const context = codemapContext({ cwd: root, target: contextTarget, pathPrefix: task.pathPrefix, stateDir, limit });
-  return [...searchPaths.slice(0, 1), ...context.readFirst.map((item) => item.path)];
+  return mergeSearchContextReadPlan(searchPaths, context.readFirst.map((item) => item.path), limit);
 }
 
 function lexicalSearch(root: string, query: string, pathPrefix = "", limit: number): Array<{ path: string; score: number }> {

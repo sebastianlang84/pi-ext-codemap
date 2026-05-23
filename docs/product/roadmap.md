@@ -42,6 +42,20 @@ Do not start embeddings, vector stores, graph work, or broad AST integration unt
 
 ## Future work
 
+### Positioning and improvement plan
+
+CodeMap's intended sweet spot is narrower than a full AI IDE or code-search server: it sits between `rg`/`ctags` and systems like Cursor, Cody, Sourcegraph, or OpenGrok. `rg` gives fast text hits; CodeMap should turn those hits into an agent read plan. `ctags` gives symbols; CodeMap combines symbols with tests, docs, configs, imports, staleness, and read-budget ordering. LSP/IDEs remain better for interactive rename/diagnostics; CodeMap should stay headless, local, and Pi-agent optimized.
+
+Near-term improvement priorities:
+
+1. **Make the current lightweight workflow honest and strong**: keep search/context evals, preserve visible search hits in scripted read plans, and expand the natural-language holdout before claiming broad bug-report navigation.
+2. **Add relationships only as measured verticals**: route↔handler, UI↔API, provider/hook↔consumer, and config-key↔usage should each get a fixture or real-repo case before any broad heuristic ships.
+3. **Improve structural extraction pragmatically**: evaluate optional `ast-grep`/Tree-sitter-style extraction for imports, exports, route declarations, and test-subject detection before adding heavier graph semantics.
+4. **Keep semantic/vector retrieval optional**: embeddings may help vague vocabulary mismatch, but exact path/symbol, lexical FTS, and deterministic relationships must remain the default and fallback.
+5. **Expose only proven surfaces**: prefer internal eval utilities and docs over new prompt-facing tools/parameters until a measured miss requires an API change.
+
+Main known weakness: quality depends on parser/import recognition, test conventions, and eval coverage. For large polyglot repos, the next durable lever is better structural extraction under the same local/no-daemon/no-mandatory-model constraints, not a broad knowledge graph.
+
 ### Product direction for arbitrary repos
 
 CodeMap should improve arbitrary, non-CodeMap-optimized repositories without requiring `.codemap` folders, curated benchmark files, or manually maintained file links. Its product identity is **agent navigation**, not a general code-retrieval system: an agent asks, CodeMap returns a useful entry point, nearby files to read first, and enough internal reasons to debug bad rankings.

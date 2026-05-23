@@ -9,6 +9,7 @@ import { codemapContext } from "../src/core/context.ts";
 import { explainNavigationMisses, summarizeNavigationMissReasons, type NavigationMissExplanation, type NavigationMissReasonSummary } from "../src/core/eval-navigation-diagnostics.ts";
 import { classifyMisses, emptyClassCounts, summarizeMissTaxonomy, type MissClass, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
 import { indexRepo, status as indexStatus } from "../src/core/indexer.ts";
+import { mergeSearchContextReadPlan } from "../src/core/navigation-read-plan.ts";
 import { searchCodeMap } from "../src/core/search.ts";
 
 type TaskCohort = "baseline" | "natural_holdout";
@@ -69,6 +70,7 @@ interface NavigationDiagnostics {
   searchTop: FileSelectionDiagnostic[];
   contextTarget?: string;
   readFirst?: FileSelectionDiagnostic[];
+  readPlan?: string[];
   missingExpected: NavigationMissExplanation[];
 }
 
@@ -406,6 +408,7 @@ function evaluateTask(options: { suite: RealRepoSuite; stateDir: string; mode: N
     searchTop: navigation.searchTop,
     contextTarget: navigation.contextTarget,
     readFirst: navigation.readFirst,
+    readPlan: uniqueFilesRead,
     missingExpected: explainNavigationMisses({
       mode,
       entry: task.entry,
@@ -415,6 +418,7 @@ function evaluateTask(options: { suite: RealRepoSuite; stateDir: string; mode: N
       searchPaths: navigation.searchTop.map((item) => item.path),
       contextTarget: navigation.contextTarget,
       readFirstPaths: navigation.readFirst?.map((item) => item.path),
+      readPlanPaths: uniqueFilesRead,
     }),
   };
   return {
@@ -473,7 +477,8 @@ function navigate(options: { root: string; stateDir: string; mode: NavigationMod
     kind: item.kind,
     reasons: item.reasons?.map((reason) => reason.kind),
   })));
-  return { filesRead: [...searchPaths.slice(0, 1), ...context.readFirst.map((item) => item.path)], searchTop, contextTarget, readFirst };
+  const filesRead = mergeSearchContextReadPlan(searchPaths, context.readFirst.map((item) => item.path), limit);
+  return { filesRead, searchTop, contextTarget, readFirst };
 }
 
 function uniqueSelections(items: FileSelectionDiagnostic[]): FileSelectionDiagnostic[] {

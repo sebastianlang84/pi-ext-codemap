@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve visible `codemap_search` hits when scripted navigation evaluates search+context read plans, resolving the remaining local real-repo baseline miss without adding prompt-facing API surface.
+- Document CodeMap's positioning as a local Pi-agent context router between grep/ctags and heavier AI/code-search systems.
 - Resolve TypeScript/JavaScript graph edges for relative `.js` specifiers that point at indexed TypeScript sources, improving reverse-import context and triggering an index-version rebuild.
 - Prioritize stem-affine reverse importers before imported-neighbor tests in small `codemap_context` budgets.
 - Prefer source files over matching tests for generic implementation-intent search queries, reducing real-repo search+context target mismatches.

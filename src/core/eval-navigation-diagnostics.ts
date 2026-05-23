@@ -50,6 +50,7 @@ export function explainNavigationMisses(input: {
   searchPaths?: string[];
   contextTarget?: string;
   readFirstPaths?: string[];
+  readPlanPaths?: string[];
 }): NavigationMissExplanation[] {
   const entryMissing = input.missingExpectedFiles.includes(input.entry);
   return input.missingExpectedFiles.map((file) => explainMissingFile(input, file, entryMissing));
@@ -103,10 +104,15 @@ function explainMissingFile(input: Parameters<typeof explainNavigationMisses>[0]
     };
   }
 
+  const readFirstPaths = input.readFirstPaths ?? [];
+  const readPlanPaths = input.readPlanPaths ?? input.filesRead;
+  const detail = readFirstPaths.includes(file) && !readPlanPaths.includes(file)
+    ? `entry was read and context suggested the file, but the merged read plan budget selected: ${previewPaths(readPlanPaths)}`
+    : `entry was read, but file was absent from read-first context/read plan: context=${previewPaths(readFirstPaths)}; plan=${previewPaths(readPlanPaths)}`;
   return {
     file,
     reason: "context_budget_or_relationship",
-    detail: `entry was read, but file was absent from read-first context: ${previewPaths(input.readFirstPaths ?? [])}`,
+    detail,
   };
 }
 

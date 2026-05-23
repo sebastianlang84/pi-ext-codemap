@@ -4,7 +4,7 @@ This deterministic eval estimates CodeMap's agent-navigation value without a liv
 
 1. `lexical` — rg-like tracked-file lexical matching.
 2. `codemap_search` — read the top CodeMap search paths only.
-3. `codemap_search_context` — search, then call `codemap_context` on the top hit and read the returned package.
+3. `codemap_search_context` — search, call `codemap_context` on the top hit, then merge visible search hits and context paths under the same read budget.
 
 The eval is a proxy for agent behavior on these fixture tasks: it measures whether the right entry file and required read-first neighbors would be available to an agent. It is not a replacement for the live-model `eval:agent-refresh` style tests.
 
@@ -43,12 +43,12 @@ On 2026-05-23, `npm run eval:agent-navigation:gate` passed on 4 fixture tasks wi
 
 | Mode | Success | Entry hit | Context recall | Forbidden read | Avg files | p95 latency |
 |---|---:|---:|---:|---:|---:|---:|
-| `lexical` | 0.50 | 1.00 | 0.667 | 0.25 | 4.00 | 12.629 ms |
-| `codemap_search` | 0.25 | 1.00 | 0.542 | 0.00 | 2.50 | 14.473 ms |
-| `codemap_search_context` | 1.00 | 1.00 | 1.000 | 0.00 | 4.00 | 31.672 ms |
+| `lexical` | 0.50 | 1.00 | 0.667 | 0.25 | 4.00 | 11.840 ms |
+| `codemap_search` | 0.50 | 1.00 | 0.667 | 0.00 | 2.75 | 15.300 ms |
+| `codemap_search_context` | 1.00 | 1.00 | 1.000 | 0.00 | 4.25 | 33.120 ms |
 
-Interpretation for this fixture: `codemap_search` is good at finding entry files, but `codemap_context` is what reliably supplies the neighboring files an editing agent should read first.
+Interpretation for this fixture: `codemap_search` is good at finding entry files and sometimes already surfaces query-relevant neighbors; `codemap_context` supplies the missing relationship neighbors when search-only is sparse.
 
 ## Boundary
 
-This eval intentionally does not change `codemap_search` ranking, tool schemas, prompt text, or graph scope. It is evidence for the current agent-navigation workflow: search for an entry point, then call context before reading/editing broadly.
+This eval intentionally does not change `codemap_search` ranking, tool schemas, prompt text, or graph scope. It is evidence for the current agent-navigation workflow: search for an entry point, preserve visible search hits as candidates, then call context before reading/editing broadly.

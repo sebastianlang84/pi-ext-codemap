@@ -14,6 +14,7 @@ after(() => rmSync(storageHome, { recursive: true, force: true }));
 const { explainNavigationMisses, summarizeNavigationMissReasons } = await import("../src/core/eval-navigation-diagnostics.ts");
 const { classifyMisses, summarizeMissTaxonomy } = await import("../src/core/eval-miss-taxonomy.ts");
 const { indexRepo, status } = await import("../src/core/indexer.ts");
+const { mergeSearchContextReadPlan } = await import("../src/core/navigation-read-plan.ts");
 const { planQuery } = await import("../src/core/query-plan.ts");
 const { scoreSearchRow } = await import("../src/core/ranking.ts");
 const { searchCodeMap, searchCodeMapWithDiagnostics } = await import("../src/core/search.ts");
@@ -162,6 +163,17 @@ test("real-repo eval miss taxonomy classifies actionable misses", () => {
   assert.equal(summary.byClass.convention, 1);
   assert.equal(summary.byClass.query_formulation, 1);
   assert.equal(summary.byClass.alias, 1);
+});
+
+test("search+context read plan preserves visible search hits within the read budget", () => {
+  assert.deepEqual(
+    mergeSearchContextReadPlan(
+      ["src/pi-extension/tools.ts", "test/pi-extension/tools.test.ts", "src/pi-extension/tag-catalog.ts", "src/pi-extension/formatters.ts"],
+      ["src/pi-extension/tools.ts", "src/core/index.ts", "src/pi-extension/formatters.ts", "test/pi-extension/tools.test.ts", "src/pi-extension/index.ts"],
+      5,
+    ),
+    ["src/pi-extension/tools.ts", "test/pi-extension/tools.test.ts", "src/pi-extension/tag-catalog.ts", "src/pi-extension/formatters.ts", "src/core/index.ts"],
+  );
 });
 
 test("agentic E2E smoke test navigates from search to read-first context", (t) => {
