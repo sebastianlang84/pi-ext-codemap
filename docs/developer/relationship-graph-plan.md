@@ -1,6 +1,6 @@
 # CodeMap relationship graph plan
 
-Status: proposed implementation plan
+Status: V1.5 import/include slice implemented on `feature/relationship-graph`; broader graph ideas gated
 Owner: CodeMap core
 Last reviewed: 2026-05-23 implementation-readiness review
 
@@ -274,6 +274,8 @@ npm run check:token-injection
 ```
 
 ### Milestone 1 — V1.5 graph imports vertical slice
+
+Status: implemented in branch commit `0cb4355`.
 
 Goal: deliver one user-visible context improvement without opening graph scope.
 

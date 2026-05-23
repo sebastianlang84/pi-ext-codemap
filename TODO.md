@@ -6,12 +6,7 @@ Active offene Arbeit für `pi-ext-codemap`. Abgehakte Punkte werden hier gelösc
 
 Ziel: Relationship-Graph als enger V1.5-Vertical-Slice: file nodes + exakte `imports`/`includes` + graph-backed `codemap_context`. Keine Symbol-/Module-/Docs-/Config-/Search-Ranking-Arbeit in diesem Slice. Planbasis: [`docs/developer/relationship-graph-plan.md`](docs/developer/relationship-graph-plan.md).
 
-1. [ ] V1.5-Graph-Imports-Slice reviewen und committen.
-   - Scope: aktueller Branch `feature/relationship-graph`; minimaler File-Graph, Import-/Include-Edge-Rebuild, graph-backed direkte/reverse Context-Nachbarn, Plan/Roadmap/Changelog/Package-Docs.
-   - Verification: `npm run typecheck`, `npm test`, `npm run bench:search-quality:gate`, `npm run check:token-injection`, `npm pack --dry-run --json`.
-   - Review/Fix: Diff nochmals prüfen; keine Prompt-/Tool-Schema- oder `codemap_search`-Änderung akzeptieren; SemVer-Impact: minor.
-
-2. [ ] Vor weiterem Graph-Ausbau Budget messen.
+1. [ ] Vor weiterem Graph-Ausbau Budget messen.
    - Scope: Index-Zeit, DB-Größe und Context-Latenz des all-indexed-source Dependency-Rebuilds auf Fixture oder lokalem größeren Repo erfassen.
    - Gate: kein Symbol-/Docs-/Config-/Heuristik-/Search-Ranking-Ausbau ohne klaren Context-Gewinn und Budget-Entscheidung.
 
