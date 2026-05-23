@@ -132,6 +132,7 @@ export function fileRoles(path: string, size = 0): string[] {
   const roles: string[] = [];
   if (basename === "readme.md") roles.push("overview");
   if (["program.md", "agents.md", "claude.md"].includes(basename)) roles.push("agent_instructions");
+  if (path === ".claude/settings.local.json") roles.push("local_agent_settings");
   if (path.startsWith("src/") || /(?:^|\/)src\//.test(path)) roles.push("implementation");
   if (["train.py", "main.py", "index.ts", "index.js"].includes(basename)) roles.push("implementation", "implementation/main");
   if (["prepare.py", "setup.py"].includes(basename)) roles.push("setup/utility");
@@ -160,6 +161,7 @@ function fileRolePenalty(roles: string[], plan: QueryPlan): number {
   const explicit = explicitNoiseIntents(plan);
   let penalty = 0;
   if (roles.includes("agent_instructions") && !plan.roleIntents.includes("agent_instructions")) penalty += 18;
+  if (roles.includes("local_agent_settings") && !plan.pathLike && !plan.roleIntents.includes("agent_instructions") && !plan.roleIntents.includes("configuration")) penalty += 18;
   if (roles.includes("lockfile")) penalty += explicit.lockfile ? 0 : 60;
   if (roles.includes("generated")) penalty += explicit.generated ? 8 : 60;
   if (roles.includes("build_output") || roles.includes("minified")) penalty += explicit.buildOutput ? 12 : 48;

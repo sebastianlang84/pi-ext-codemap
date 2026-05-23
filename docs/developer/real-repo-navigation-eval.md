@@ -70,30 +70,30 @@ The gate applies the success/recall/latency thresholds to the `baseline` cohort 
 
 ## Current local result
 
-On 2026-05-23, after adding minimal TS/JS path-alias graph resolution, protecting source→test convention neighbors in small budgets, narrowing generic `implementation` role-intent retrieval, preferring source files over matching tests for implementation-intent queries, resolving TypeScript relative `.js` specifiers to indexed source files, prioritizing stem-affine reverse importers, preserving visible search hits in the scripted search+context read plan, expanding the natural-language holdout cohort, and penalizing agent-instruction files for non-agent queries, `npm run eval:real-repo-navigation:gate` passed on 8 baseline tasks plus 10 holdout tasks with the default 5-file read budget.
+On 2026-05-23, after adding minimal TS/JS path-alias graph resolution, protecting source→test convention neighbors in small budgets, narrowing generic `implementation` role-intent retrieval, preferring source files over matching tests for implementation-intent queries, resolving TypeScript relative `.js` specifiers to indexed source files, prioritizing stem-affine reverse importers, preserving visible search hits in the scripted search+context read plan, expanding the natural-language holdout cohort, penalizing agent-instruction files for non-agent queries, and expanding natural identifier compounds while demoting local Claude settings, `npm run eval:real-repo-navigation:gate` passed on 8 baseline tasks plus 10 holdout tasks with the default 5-file read budget.
 
 Baseline cohort:
 
 | Mode | Success | Entry hit | Expected recall | Context recall | Avg files | p95 latency |
 |---|---:|---:|---:|---:|---:|---:|
-| `lexical` | 0.125 | 0.500 | 0.521 | 0.563 | 5.000 | 24.024 ms |
-| `codemap_search` | 0.125 | 1.000 | 0.510 | 0.188 | 1.875 | 34.141 ms |
-| `codemap_search_context` | 1.000 | 1.000 | 1.000 | 1.000 | 4.875 | 48.465 ms |
+| `lexical` | 0.125 | 0.500 | 0.521 | 0.563 | 5.000 | 24.837 ms |
+| `codemap_search` | 0.125 | 1.000 | 0.510 | 0.188 | 1.875 | 34.318 ms |
+| `codemap_search_context` | 1.000 | 1.000 | 1.000 | 1.000 | 4.875 | 51.750 ms |
 
 Natural-language holdout cohort:
 
 | Mode | Success | Entry hit | Expected recall | Context recall | Avg files | p95 latency |
 |---|---:|---:|---:|---:|---:|---:|
-| `lexical` | 0.100 | 0.600 | 0.475 | 0.450 | 5.000 | 17.218 ms |
-| `codemap_search` | 0.200 | 0.600 | 0.458 | 0.433 | 2.800 | 26.256 ms |
-| `codemap_search_context` | 0.500 | 0.700 | 0.633 | 0.617 | 4.500 | 45.685 ms |
+| `lexical` | 0.100 | 0.600 | 0.475 | 0.450 | 5.000 | 18.852 ms |
+| `codemap_search` | 0.200 | 0.700 | 0.525 | 0.483 | 2.800 | 26.382 ms |
+| `codemap_search_context` | 0.500 | 0.800 | 0.700 | 0.667 | 4.600 | 49.020 ms |
 
 Baseline deltas:
 
 - Search+context vs lexical: `+0.875` success, `+0.479` expected recall, `+0.437` context recall, with `0.125` fewer files read on average.
 - Search+context vs search-only: `+0.875` success, `+0.490` expected recall, `+0.812` context recall.
 
-The eval also emits a miss taxonomy, per-case navigation diagnostics, and aggregate navigation-miss reason counts. In the latest local run, baseline `codemap_search_context` had no classified taxonomy misses; its previous `alias`, `missing_symbol`, `convention`, `query_formulation`, and `unknown` taxonomy misses are resolved. Baseline navigation-reason buckets are also at zero. The expanded natural-language holdout had no forbidden reads and its previous ambiguous `sg` binary `context_target_mismatch` is resolved. It still exposes 5 failing `codemap_search_context` cases: provider source/test context beyond budget, workbench session entry mismatch, handoff scope docs/code mismatch, reviewer-context-scout docs/test mismatch, and `sg` binary README context beyond the read budget. Lexical still had 12 baseline missing-expected files plus 5 `noise` reads.
+The eval also emits a miss taxonomy, per-case navigation diagnostics, and aggregate navigation-miss reason counts. In the latest local run, baseline `codemap_search_context` had no classified taxonomy misses; its previous `alias`, `missing_symbol`, `convention`, `query_formulation`, and `unknown` taxonomy misses are resolved. Baseline navigation-reason buckets are also at zero. The expanded natural-language holdout had no forbidden reads. The workbench session holdout now reads both the session hook and component, but still misses the chart test within the 5-file budget. Remaining failing `codemap_search_context` cases are: provider source/test context beyond budget, workbench chart-test budget/targeting, handoff scope docs/code mismatch, reviewer-context-scout docs/test mismatch, and `sg` binary README context beyond the read budget. Lexical still had 12 baseline missing-expected files plus 5 `noise` reads.
 
 Interpretation: under a realistic small read budget, CodeMap's value is strongest when agents use the intended workflow: search for an entry point, keep the visible search hits as candidate reads, then call context. Search-only is not enough; context supplies neighboring test/config/doc/source files that lexical search often misses or buries behind noisy hits. The expanded holdout is now deliberately harder: it catches exact-symbol overfitting and exposes natural-language routing gaps instead of claiming arbitrary bug-report navigation.
 

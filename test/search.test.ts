@@ -461,6 +461,62 @@ test("rejects ambiguous sg shadow utils command", () => resolveAstGrepBinaryPath
   assert.ok(agentIndex === -1 || agentIndex > sourceIndex, JSON.stringify(results.map((result) => ({ path: result.path, score: result.score }))));
 });
 
+test("natural identifier pairs keep compact code terms without prose compounds", () => {
+  const plan = planQuery("workbench chart interval and x range settings should survive reload from local storage");
+
+  assert.ok(plan.coreTerms.includes("xrange"), JSON.stringify(plan.coreTerms));
+  assert.ok(plan.coreTerms.includes("localstorage"), JSON.stringify(plan.coreTerms));
+  assert.ok(!plan.coreTerms.includes("shouldsurvive"), JSON.stringify(plan.coreTerms));
+});
+
+test("ordinary natural queries penalize local Claude settings", () => {
+  const naturalPlan = planQuery("workbench chart interval and x range settings should survive reload from local storage");
+  const pathPlan = planQuery(".claude/settings.local.json");
+  const claudePlan = planQuery("claude settings permissions");
+  const row = {
+    path: ".claude/settings.local.json",
+    language: "json",
+    startLine: 1,
+    endLine: 8,
+    kind: "text",
+    text: '{ "permissions": { "allow": ["Bash(curl:*)"] }, "spinnerTipsEnabled": true }',
+    rank: -1,
+    size: 120,
+    symbolName: null,
+  };
+
+  assert.equal(scoreSearchRow(row, naturalPlan, 4).noisePenalty, 18);
+  assert.equal(scoreSearchRow(row, pathPlan, 4).noisePenalty, 0);
+  assert.equal(scoreSearchRow(row, claudePlan, 4).noisePenalty, 0);
+});
+
+test("natural workbench session queries prefer source over local agent settings", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-workbench-session-source-first-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, ".claude"), { recursive: true });
+  mkdirSync(join(root, "src", "lib"), { recursive: true });
+
+  writeFileSync(join(root, ".claude", "settings.local.json"), JSON.stringify({
+    permissions: { allow: ["Bash(curl:*)"] },
+    spinnerTipsEnabled: true,
+  }, null, 2));
+  writeFileSync(join(root, "src", "lib", "use-series-workbench-session.ts"), `
+export function restoreSeriesWorkbenchSession() {
+  const saved = localStorage.getItem("series-workbench-session");
+  return saved ? JSON.parse(saved) : { interval: "1d", range: "1y" };
+}
+`);
+  indexRepo({ cwd: root, approve: true });
+
+  const results = searchCodeMap({ cwd: root, query: "workbench chart interval and x range settings should survive reload from local storage", limit: 5 });
+  const sourceIndex = results.findIndex((result) => result.path === "src/lib/use-series-workbench-session.ts");
+  const localSettingsIndex = results.findIndex((result) => result.path === ".claude/settings.local.json");
+
+  assert.equal(sourceIndex, 0, JSON.stringify(results.map((result) => ({ path: result.path, score: result.score }))));
+  assert.ok(localSettingsIndex === -1 || localSettingsIndex > sourceIndex, JSON.stringify(results.map((result) => ({ path: result.path, score: result.score }))));
+});
+
 test("implementation-intent queries prefer source targets over matching tests", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-implementation-source-first-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

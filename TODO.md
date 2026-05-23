@@ -14,13 +14,13 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
 
 - **TypeScript-Pfadaliasse — Restgrenzen**: Minimaler `tsconfig.json` / `jsconfig.json` `baseUrl` + `paths`-Support ist umgesetzt; offen bleiben komplexe `extends`-Ketten, Workspace-Aliasse und Budget-Ordering bei vielen Alias-Imports.
 - **Framework-/Konventions-Nachbarn**: relevante Dateien sind teils nicht über direkte Imports verbunden, sondern über Namens-/Framework-Konventionen, z. B. UI-zu-API, Route-Handler, Provider oder Config-Dateien. Source→Test-Budget-Ordering, ein importierter Source→Test-Nachbar, source-first Implementation-Targeting, TypeScript-`.js`-Specifier-Auflösung, stem-affine Reverse-Importer und Search-Hit-Preservation im Eval-Readplan sind als kleine Verticals geschützt; weitere Konventionen brauchen eigene Eval-/Fixture-Belege. Der aktuelle Baseline-`codemap_search_context`-Run hat keine Misses.
-- **Natürlichere Bug-/Änderungsanfragen — Restgrenzen**: Real-Repo-Eval enthält jetzt 10 Natural-Language-Holdout-Cases ohne exakte Funktions-/Klassen-Symbolnamen. Der Satz ist weiter lokal und teils gepaart. Der `sg`-Binary-Target-Mismatch durch `AGENTS.md` ist behoben; offen bleiben Entry-Misses, Context-Budget/Relationship und Code↔Docs/Test-Konventionen.
+- **Natürlichere Bug-/Änderungsanfragen — Restgrenzen**: Real-Repo-Eval enthält jetzt 10 Natural-Language-Holdout-Cases ohne exakte Funktions-/Klassen-Symbolnamen. Der Satz ist weiter lokal und teils gepaart. `sg`-Binary-Target-Mismatch durch `AGENTS.md` und der Workbench-Session-Entry-Miss sind behoben; offen bleiben Entry-Misses, Context-Budget/Relationship und Code↔Docs/Test-Konventionen.
 - **False positives / verbotene Reads**: lexical liest im Real-Repo-Gate häufiger verbotene/noisy Dateien; CodeMap vermeidet sie aktuell, aber neue Heuristiken können Noise zurückbringen.
 
 ## Nächste sinnvolle Slices — vorgeschlagene Reihenfolge
 
 1. [ ] Nächsten Expanded-Natural-Holdout-Fix-Slice auswählen.
-   - Aktuelle sichtbare Misses: Macrolens Provider-Test/Provider-Source-Budget, Macrolens Workbench-Session-Entry, pi-ext-memory Handoff-Code↔ADR, pi-ext-subagents Reviewer-Scout-Docs↔Benchmark, pi-ext-astgrep `sg`-Binary README-Budget.
+   - Aktuelle sichtbare Misses: Macrolens Provider-Test/Provider-Source-Budget, Macrolens Workbench-Chart-Test-Budget, pi-ext-memory Handoff-Code↔ADR, pi-ext-subagents Reviewer-Scout-Docs↔Benchmark, pi-ext-astgrep `sg`-Binary README-Budget.
    - Regel: erst Diagnose/öffentlicher Regressionstest, dann maximal ein Hebel; keine Query-/Threshold-Änderung als Ersatz für Systemverbesserung.
 
 2. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
