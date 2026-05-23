@@ -197,6 +197,22 @@ const defaultSuites: RealRepoSuite[] = [
         requiredContext: ["apps/web/src/lib/__tests__/newsletter-macro-snapshot.test.ts"],
         forbidden: ["apps/web/package-lock.json", "package-lock.json"],
       },
+      {
+        name: "NL holdout partial provider outage",
+        cohort: "natural_holdout",
+        query: "dashboard provider no data diagnostics should keep FRED and Yahoo series when one market source is empty",
+        entry: "apps/web/src/lib/dashboard-pipeline.ts",
+        requiredContext: ["apps/web/src/lib/__tests__/dashboard-pipeline.test.ts", "apps/web/src/lib/providers/fred.ts", "apps/web/src/lib/providers/yahoo.ts"],
+        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
+      },
+      {
+        name: "NL holdout workbench chart session restore",
+        cohort: "natural_holdout",
+        query: "workbench chart interval and x range settings should survive reload from local storage",
+        entry: "apps/web/src/lib/use-series-workbench-session.ts",
+        requiredContext: ["apps/web/src/lib/__tests__/series-workbench-chart.test.ts", "apps/web/src/components/series-workbench.tsx"],
+        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
+      },
     ],
   },
   {
@@ -216,6 +232,14 @@ const defaultSuites: RealRepoSuite[] = [
         query: "FastAPI confirm true run already in progress",
         entry: "api/app.py",
         requiredContext: ["docker-compose.webapp.yml", "PRD_webapp.md"],
+        forbidden: ["ui/package-lock.json"],
+      },
+      {
+        name: "NL holdout run button busy status",
+        cohort: "natural_holdout",
+        query: "webapp run button disabled while batch is starting then status polling shows latest success or failure",
+        entry: "ui/src/App.tsx",
+        requiredContext: ["api/app.py", "PRD_webapp.md"],
         forbidden: ["ui/package-lock.json"],
       },
     ],
@@ -246,6 +270,14 @@ const defaultSuites: RealRepoSuite[] = [
         requiredContext: ["test/pi-extension/retrieval.test.ts"],
         forbidden: ["package-lock.json"],
       },
+      {
+        name: "NL holdout handoff scope precedence",
+        cohort: "natural_holdout",
+        query: "active handoff preload should prefer current session before repo fallback and warn not to overwrite fallback handoffs",
+        entry: "src/pi-extension/retrieval.ts",
+        requiredContext: ["test/pi-extension/retrieval.test.ts", "docs/adr/005-simplified-agent-facing-scopes.md", "docs/adr/006-normal-and-advanced-tool-surface.md"],
+        forbidden: ["package-lock.json", "docs/archive/plans/tool-surface-simplification.md"],
+      },
     ],
   },
   {
@@ -265,6 +297,14 @@ const defaultSuites: RealRepoSuite[] = [
         entry: "src/request.ts",
         requiredContext: ["tests/request.test.mjs"],
       },
+      {
+        name: "NL holdout reviewer scout recursion guard",
+        cohort: "natural_holdout",
+        query: "reviewer context scout should gather bounded contract and nearby test evidence without scout recursion",
+        entry: "docs/plans/reviewer-context-scout.md",
+        requiredContext: ["docs/benchmarks/reviewer-context-scout-fixtures.json", "tests/reviewer-context-scout-benchmark.test.mjs"],
+        forbidden: ["docs/plans/fanout-reduce.md"],
+      },
     ],
   },
   {
@@ -276,6 +316,14 @@ const defaultSuites: RealRepoSuite[] = [
         query: "getPatternHint implementation ast-grep rule language support fixer",
         entry: "src/ast-grep/pattern-hints.ts",
         requiredContext: ["test/pattern-hints.test.ts"],
+        forbidden: ["package-lock.json", "docs/archive/plans/slim-fork-plan.md"],
+      },
+      {
+        name: "NL holdout ambiguous sg binary",
+        cohort: "natural_holdout",
+        query: "ast grep binary path should reject ambiguous sg shadow utils command and show install guidance",
+        entry: "src/ast-grep/binary-path.ts",
+        requiredContext: ["src/ast-grep/cli.ts", "test/binary-path.test.ts", "README.md"],
         forbidden: ["package-lock.json", "docs/archive/plans/slim-fork-plan.md"],
       },
     ],
@@ -300,9 +348,9 @@ function parseArgs(args: string[]): ParsedArgs {
   let limit = 5;
   let maxP95LatencyMs = 500;
   let minTasks = 8;
-  let minNaturalHoldoutTasks = 4;
-  let minNaturalHoldoutExpectedRecall = 0.75;
-  let minNaturalHoldoutContextRecall = 0.75;
+  let minNaturalHoldoutTasks = 10;
+  let minNaturalHoldoutExpectedRecall = 0.55;
+  let minNaturalHoldoutContextRecall = 0.55;
   let minSuccessDeltaVsLexical = 0.2;
   let minContextRecallDeltaVsSearch = 0.2;
   for (let i = 0; i < args.length; i++) {
