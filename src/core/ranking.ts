@@ -71,6 +71,7 @@ export function scoreSearchRow(row: SearchRow, plan: QueryPlan, boost: number): 
   const testLike = /(^|\/)(?:test|tests|__tests__)\//.test(lowerPath) || /(?:^|[._-])test\./.test(basename);
   const docLike = /(^|\/)(?:readme|architecture|changelog|todo)(?:\.|$)|\.(?:md|mdx|rst|txt)$/.test(lowerPath);
   const roles = fileRoles(lowerPath, row.size ?? undefined);
+  const implementationIntent = plan.roleIntents.includes("implementation") && !plan.roleIntents.includes("tests");
   const retrievalBoost = boost;
   const ftsScore = rankScore(row.rank);
   const pathScore = (exactPath ? 6 : 0) + (lowerPath.endsWith(plan.normalized) ? 3 : 0) + pathCoverage * 5;
@@ -85,7 +86,7 @@ export function scoreSearchRow(row: SearchRow, plan: QueryPlan, boost: number): 
   const textCoverageScore = textCoverage * 3;
   const codeIntentBoost = (plan.codeIntent && codeLike ? 2 : 0) + (plan.codeIntent && sourceLike ? 4 : 0);
   const roleBoost = fileRoleBoost(roles, plan.roleIntents);
-  const testPenalty = plan.codeIntent && testLike ? 3 : 0;
+  const testPenalty = testLike ? (implementationIntent ? 8 : plan.codeIntent ? 3 : 0) : 0;
   const docPenalty = plan.codeIntent && docLike ? 6 : 0;
   const noisePenalty = fileRolePenalty(roles, plan);
   const matchedTokens = matchedQueryTokens([lowerPath, lowerText, symbolName].join("\n"), plan.coreTerms);

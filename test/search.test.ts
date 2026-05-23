@@ -344,6 +344,64 @@ test("generic implementation search does not seed unrelated main entrypoints", (
   assert.equal(mainResults[0]?.path, "src/index.ts", JSON.stringify(mainResults));
 });
 
+test("implementation-intent ranking penalizes test-only matches", () => {
+  const plan = planQuery("registerMemoryTools implementation memory_search");
+  const sourceDiagnostics = scoreSearchRow({
+    path: "src/pi-extension/tools.ts",
+    language: "typescript",
+    startLine: 1,
+    endLine: 5,
+    kind: "function",
+    text: "export function registerMemoryTools() {}",
+    rank: -1,
+    size: 100,
+    symbolName: "registerMemoryTools",
+  }, plan, 4);
+  const testDiagnostics = scoreSearchRow({
+    path: "test/pi-extension/tools.test.ts",
+    language: "typescript",
+    startLine: 1,
+    endLine: 5,
+    kind: "method",
+    text: "registerMemoryTools memory_search implementation",
+    rank: -1,
+    size: 100,
+    symbolName: "registerMemoryTools",
+  }, plan, 4);
+
+  assert.ok(testDiagnostics.testPenalty > 0, JSON.stringify(testDiagnostics));
+  assert.ok(sourceDiagnostics.finalScore > testDiagnostics.finalScore, JSON.stringify({ sourceDiagnostics, testDiagnostics }));
+});
+
+test("implementation-intent queries prefer source targets over matching tests", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-implementation-source-first-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src", "pi-extension"), { recursive: true });
+  mkdirSync(join(root, "test", "pi-extension"), { recursive: true });
+
+  writeFileSync(join(root, "src", "pi-extension", "tools.ts"), `
+export function registerMemoryTools() {
+  return true;
+}
+`);
+  writeFileSync(join(root, "test", "pi-extension", "tools.test.ts"), `
+import { registerMemoryTools } from "../../src/pi-extension/tools";
+
+// Repeated test-local helper methods should not saturate the implementation query candidate pool.
+${Array.from({ length: 30 }, (_, index) => `export const testCase${index} = { registerMemoryTools() { return "implementation memory_search empty_result_hints near canonical keys near tag suggestions"; } };`).join("\n")}
+
+test("registerMemoryTools implementation memory_search empty_result_hints near canonical keys near tag suggestions", () => {
+  testCase0.registerMemoryTools();
+});
+`);
+  indexRepo({ cwd: root, approve: true });
+
+  const results = searchCodeMap({ cwd: root, query: "registerMemoryTools implementation memory_search empty_result_hints near canonical keys near tag suggestions", limit: 5 });
+
+  assert.equal(results[0]?.path, "src/pi-extension/tools.ts", JSON.stringify(results.map((result) => ({ path: result.path, score: result.score }))));
+});
+
 test("python class and function symbols are searchable", (t) => {
   const root = fixtureRepo(t);
   assert.ok(searchCodeMap({ cwd: root, query: "DeliveryClient", limit: 5 }).some((result) => result.kind === "class"));

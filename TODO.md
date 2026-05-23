@@ -13,25 +13,21 @@ Refresh-Automation bleibt nach dem Agent-Refresh-Eval bewusst zurückgestellt; s
 Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sondern Misses sichtbar machen und daraus gezielte Verbesserungs-Slices ableiten. Die eigentlichen To-do-Checkboxen stehen im nächsten Abschnitt, damit die Backlog-Liste nicht doppelt gezählt wird.
 
 - **TypeScript-Pfadaliasse — Restgrenzen**: Minimaler `tsconfig.json` / `jsconfig.json` `baseUrl` + `paths`-Support ist umgesetzt; offen bleiben komplexe `extends`-Ketten, Workspace-Aliasse und Budget-Ordering bei vielen Alias-Imports.
-- **Framework-/Konventions-Nachbarn**: relevante Dateien sind teils nicht über direkte Imports verbunden, sondern über Namens-/Framework-Konventionen, z. B. UI-zu-API, Route-Handler, Provider oder Config-Dateien. Source→Test-Budget-Ordering und ein importierter Source→Test-Nachbar sind als kleine Verticals geschützt; weitere Konventionen brauchen eigene Eval-/Fixture-Belege. Die aktuellen Baseline-Restmisses splitten in `context_target_mismatch` (2) und `context_budget_or_relationship` (2).
+- **Framework-/Konventions-Nachbarn**: relevante Dateien sind teils nicht über direkte Imports verbunden, sondern über Namens-/Framework-Konventionen, z. B. UI-zu-API, Route-Handler, Provider oder Config-Dateien. Source→Test-Budget-Ordering, ein importierter Source→Test-Nachbar und source-first Implementation-Targeting sind als kleine Verticals geschützt; weitere Konventionen brauchen eigene Eval-/Fixture-Belege. Die aktuellen Baseline-Restmisses splitten jetzt vollständig in `context_budget_or_relationship` (3).
 - **Natürlichere Bug-/Änderungsanfragen — Restgrenzen**: Real-Repo-Eval enthält jetzt einen kleinen Natural-Language-Holdout ohne exakte Symbolnamen. Offen bleibt ein größerer, stabiler Holdout für beliebige Bugreports; der aktuelle Satz ist noch lokal und klein.
 - **False positives / verbotene Reads**: lexical liest im Real-Repo-Gate häufiger verbotene/noisy Dateien; CodeMap vermeidet sie aktuell, aber neue Heuristiken können Noise zurückbringen.
 
 ## Nächste sinnvolle Slices — vorgeschlagene Reihenfolge
 
-1. [ ] Restmiss-Bucket `context_target_mismatch` als getrennten Ranking-/Targeting-Slice prüfen.
-   - Aktuelle Fälle: `pi-ext-memory` `memory_search empty-result hints` landet zuerst auf `test/pi-extension/tools.test.ts`; erwarteter Context-Target wäre `src/pi-extension/tools.ts`.
-   - Regel: nur ändern, wenn ein Fixture oder Real-Repo-Case zeigt, dass Search→Context für Implementierungsqueries source-first wählen soll, ohne Test-Navigation zu verschlechtern.
-
-2. [ ] Restmiss-Bucket `context_budget_or_relationship` als getrennten Relationship-/Budget-Slice prüfen.
-   - Aktuelle Fälle: `macrolens` `series-workbench-backtest.ts` und `pi-ext-subagents` `src/execution.ts` fehlen trotz richtigem Entry-Target.
+1. [ ] Restmiss-Bucket `context_budget_or_relationship` als getrennten Relationship-/Budget-Slice prüfen.
+   - Aktuelle Fälle: `macrolens` `series-workbench-backtest.ts`, `pi-ext-memory` `src/pi-extension/tag-catalog.ts` und `pi-ext-subagents` `src/execution.ts` fehlen trotz richtigem Entry-Target.
    - Regel: erst Beziehung/Grundwahrheit prüfen; keine breite Multi-Hop-/Same-Dir-Heuristik ohne messbaren Recall-Gewinn und Noise-Budget.
 
-3. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
+2. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
    - Kandidaten: Route↔Handler, UI↔API, Provider/Hook↔Consumer, Config-Key↔Nutzung; Source↔Test nur wieder anfassen, wenn ein neuer Eval-Miss nicht durch Entry/Search-Ranking verursacht ist.
    - Regel: pro Konvention ein Fixture/Real-Repo-Case, eigene Metrik, keine breite Heuristik ohne messbaren Gewinn.
 
-4. [ ] ast-grep/AST-gestützten Structural-Analyzer als Prototyp evaluieren.
+3. [ ] ast-grep/AST-gestützten Structural-Analyzer als Prototyp evaluieren.
    - Ziel: prüfen, ob AST-Beziehungen CodeMap-Context verbessern, ohne CodeMap zu einem vollständigen ast-grep-Ersatz zu machen.
    - Scope: zuerst eval-/index-intern und optional; keine harte Runtime-Abhängigkeit und kein neues prompt-facing Tool, bevor Recall/Budget/Noise klar besser sind.
 
