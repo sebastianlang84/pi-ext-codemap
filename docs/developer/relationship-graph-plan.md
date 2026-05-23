@@ -254,6 +254,19 @@ create table if not exists graph_annotations (
 
 Do not create `codemap_enrich` or add prompt-facing tool descriptions until there is a clear first enrichment use case and token-injection budget review.
 
+## V1.5 budget baseline
+
+Measured on 2026-05-23 with `npm run bench:graph-budget` and `npm run bench:graph-budget:local` after the V1.5 import/include slice. The benchmark records cold index time, warm no-change index time, a forced graph-rebuild `indexRepo` pass over unchanged files, SQLite size including WAL/SHM files, graph rows, and 10 repeated `codemap_context` calls per graph-edge target. These numbers are a baseline, not a permanent gate; re-run before any symbol/docs/config/heuristic/search-ranking graph expansion. Local absolute repo rows are operator-specific spot checks, not portable release gates.
+
+| Corpus | Files | Graph edges | DB bytes | Cold index | Warm index | Graph rebuild | Context avg | Context p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `test/fixtures/graph-budget` | 10 | 6 | 106,496 | 24.285 ms | 12.268 ms | 12.080 ms | 19.556 ms | 26.045 ms |
+| `/home/wasti/macrolens` | 106 | 27 | 2,789,376 | 126.367 ms | 21.041 ms | 32.630 ms | 29.824 ms | 49.280 ms |
+| `/home/wasti/ai_stack/services/newsletter-writer` | 29 | 25 | 1,740,800 | 86.584 ms | 19.206 ms | 26.302 ms | 28.604 ms | 31.312 ms |
+| `/home/wasti/dev/autoresearch` | 5 | 0 | 307,200 | 19.694 ms | 10.544 ms | 11.123 ms | 21.154 ms | 23.504 ms |
+
+Budget decision: V1.5 remains acceptable for the measured fixture and local repos. The all-indexed-source graph rebuild cost was small relative to cold indexing in these runs, so no incremental graph invalidation work is justified yet. Keep the existing cap-and-measure posture: do not expand graph scope until a concrete context-quality gain outweighs additional index time, DB size, and context latency.
+
 ## Milestones
 
 ### Milestone 0 — Plan and baseline measurements
@@ -342,18 +355,18 @@ These are intentionally not part of V1.5 and need separate evidence before imple
 
 ## Open questions
 
-1. What fixture/local repo size should become the first index-time and DB-size budget guard for all-source dependency rebuilds?
+1. What larger portable fixture should become the first CI budget guard for all-source dependency rebuilds, beyond the current local spot-check baseline?
 2. After exact import-backed tests work, is a path-based `tested_by` edge worth a separate noisy-heuristic gate?
 3. Should graph-backed impact analysis become a new core API only, or eventually a fifth Pi tool/command?
 
-## Suggested first implementation slice
+## Implemented first slice
 
-Implement the V1.5 vertical slice, not a substrate-only graph:
+The V1.5 vertical slice intentionally delivered user-visible `codemap_context` value instead of a substrate-only graph:
 
-- add minimal file-node/file-edge schema;
-- persist exact local import/include edges during indexing;
-- query graph for direct and reverse context neighbors;
-- prove one reverse-import context path works without query-time chunk rescanning;
-- keep search, public tools, prompt text, symbols, docs/config, and heuristic edges unchanged.
+- minimal file-node/file-edge schema;
+- exact local import/include edges persisted during indexing;
+- direct and reverse context neighbors queried from the graph;
+- reverse-import context coverage without query-time chunk rescanning;
+- no search, public tool, prompt text, symbol-node, docs/config, or heuristic-edge changes.
 
-This slice creates visible `codemap_context` value while keeping the graph small enough to review and revert.
+Future slices should stay similarly small and measured.

@@ -4,11 +4,7 @@ Active offene Arbeit für `pi-ext-codemap`. Abgehakte Punkte werden hier gelösc
 
 ## Active tactical backlog — reviewed order
 
-Ziel: Relationship-Graph als enger V1.5-Vertical-Slice: file nodes + exakte `imports`/`includes` + graph-backed `codemap_context`. Keine Symbol-/Module-/Docs-/Config-/Search-Ranking-Arbeit in diesem Slice. Planbasis: [`docs/developer/relationship-graph-plan.md`](docs/developer/relationship-graph-plan.md).
-
-1. [ ] Vor weiterem Graph-Ausbau Budget messen.
-   - Scope: Index-Zeit, DB-Größe und Context-Latenz des all-indexed-source Dependency-Rebuilds auf Fixture oder lokalem größeren Repo erfassen.
-   - Gate: kein Symbol-/Docs-/Config-/Heuristik-/Search-Ranking-Ausbau ohne klaren Context-Gewinn und Budget-Entscheidung.
+Aktuell kein nächster Slice ausgewählt. Der V1.5 Relationship-Graph ist implementiert und die Budget-Baseline ist in [`docs/developer/relationship-graph-plan.md`](docs/developer/relationship-graph-plan.md#v15-budget-baseline) dokumentiert. Weiterer Graph-Ausbau bleibt gated: kein Symbol-/Docs-/Config-/Heuristik-/Search-Ranking-Ausbau ohne klaren Context-Gewinn und neue Budget-Entscheidung.
 
 Refresh-Automation bleibt nach dem Agent-Refresh-Eval bewusst zurückgestellt; siehe [`docs/developer/agent-refresh-eval.md`](docs/developer/agent-refresh-eval.md#current-finding).
 

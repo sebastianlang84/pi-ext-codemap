@@ -39,6 +39,8 @@
     "bench:search-quality": "node --experimental-strip-types scripts/bench-search-quality.ts --fixtures",
     "bench:search-quality:gate": "node --experimental-strip-types scripts/bench-search-quality.ts --quality-gate --fixtures",
     "bench:search-quality:local": "node --experimental-strip-types scripts/bench-search-quality.ts --local-repos",
+    "bench:graph-budget": "node --experimental-strip-types scripts/bench-graph-budget.ts --fixtures",
+    "bench:graph-budget:local": "node --experimental-strip-types scripts/bench-graph-budget.ts --local-repos",
     "eval:agent-refresh": "node --experimental-strip-types scripts/eval-agent-refresh.ts",
     "check:token-injection": "node --experimental-strip-types scripts/check-token-injection.ts --budget-gate",
     "audit:lightweight": "node scripts/audit.mjs"
