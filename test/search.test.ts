@@ -740,6 +740,34 @@ export function approveUser(id: string) {
   assert.deepEqual(result.warnings, []);
 });
 
+test("context read-first keeps a convention sibling test within the small read budget", (t) => {
+  const root = fixtureRepo(t);
+  mkdirSync(join(root, "src", "pi-extension"), { recursive: true });
+  mkdirSync(join(root, "test", "pi-extension"), { recursive: true });
+
+  writeFileSync(join(root, "src", "pi-extension", "retrieval.ts"), `
+import { readStore } from "./store";
+import { validateQuery } from "./validation";
+
+export function retrieve(query: string) {
+  return validateQuery(query) ? readStore(query) : [];
+}
+`);
+  writeFileSync(join(root, "src", "pi-extension", "store.ts"), "export function readStore(query: string) { return [query]; }\n");
+  writeFileSync(join(root, "src", "pi-extension", "validation.ts"), "export function validateQuery(query: string) { return Boolean(query); }\n");
+  writeFileSync(join(root, "src", "pi-extension", "commands.ts"), "import { retrieve } from './retrieval';\nexport const runRetrieval = retrieve;\n");
+  writeFileSync(join(root, "src", "pi-extension", "retrieval.config.json"), JSON.stringify({ limit: 5 }, null, 2));
+  writeFileSync(join(root, "test", "pi-extension", "retrieval.test.ts"), "test('retrieval convention neighbor', () => true);\n");
+  indexRepo({ cwd: root });
+
+  const result = codemapContext({ cwd: root, target: "src/pi-extension/retrieval.ts", limit: 5 });
+  const paths = result.readFirst.map((item) => item.path);
+
+  assert.equal(paths[0], "src/pi-extension/retrieval.ts");
+  assert.ok(paths.includes("test/pi-extension/retrieval.test.ts"), JSON.stringify(paths));
+  assert.ok(result.readFirst.find((item) => item.path === "test/pi-extension/retrieval.test.ts")?.reasons?.some((reason) => reason.kind === "sibling_test"), JSON.stringify(result.readFirst));
+});
+
 test("context read-first includes Python relative imports with reasons", (t) => {
   const root = fixtureRepo(t);
   mkdirSync(join(root, "src", "pkg"), { recursive: true });

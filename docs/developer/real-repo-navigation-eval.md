@@ -61,13 +61,13 @@ The gate requires CodeMap search+context to improve success over lexical search,
 
 ## Current local result
 
-On 2026-05-23, after adding minimal TS/JS path-alias graph resolution, `npm run eval:real-repo-navigation:gate` passed on 8 local tasks with the default 5-file read budget:
+On 2026-05-23, after adding minimal TS/JS path-alias graph resolution and then protecting one source→test neighbor ahead of nearby config, `npm run eval:real-repo-navigation:gate` passed on 8 local tasks with the default 5-file read budget. The source→test ordering change did not move aggregate success/recall because the remaining test miss is coupled to a missed entry file:
 
 | Mode | Success | Entry hit | Expected recall | Context recall | Avg files | p95 latency |
 |---|---:|---:|---:|---:|---:|---:|
-| `lexical` | 0.125 | 0.375 | 0.438 | 0.500 | 5.000 | 24.962 ms |
-| `codemap_search` | 0.000 | 1.000 | 0.510 | 0.188 | 3.750 | 35.455 ms |
-| `codemap_search_context` | 0.625 | 0.875 | 0.771 | 0.729 | 3.875 | 50.931 ms |
+| `lexical` | 0.125 | 0.375 | 0.438 | 0.500 | 5.000 | 22.830 ms |
+| `codemap_search` | 0.000 | 1.000 | 0.510 | 0.188 | 3.750 | 34.457 ms |
+| `codemap_search_context` | 0.625 | 0.875 | 0.771 | 0.729 | 3.875 | 48.637 ms |
 
 Deltas:
 
@@ -84,7 +84,8 @@ The eval is intentionally honest. It still exposes misses:
 
 - Minimal TypeScript/JavaScript path-alias support covers indexed `tsconfig.json` / `jsconfig.json` `baseUrl` + `paths`; it does not yet chase complex `extends` chains or package-manager workspace aliases.
 - Some framework/UI-to-API relationships are convention/config based, not import based.
-- Alias imports add useful direct neighbors and increase average search+context reads on this suite; direct imports are therefore capped before convention/test neighbors get a chance in the read-first budget.
+- Alias imports add useful direct neighbors and increase average search+context reads on this suite; direct imports are therefore capped, and one convention sibling test is kept ahead of nearby config files in the read-first budget.
+- The remaining `codemap_search_context` convention miss in the current suite is coupled to a missed entry file, so source-test ordering alone does not move the aggregate real-repo metrics.
 - Search+context is slower than lexical scanning on these small repos, though still under the local gate threshold.
 
 These are candidates for future gated work; they should not be expanded unless this real-repo eval or a follow-up case proves the benefit.

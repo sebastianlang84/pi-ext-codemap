@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep one convention-based sibling test earlier than nearby config files in small `codemap_context` read-first budgets.
 - Resolve minimal TypeScript/JavaScript `tsconfig.json` / `jsconfig.json` path aliases as graph-backed local import neighbors for `codemap_context`.
 - Add miss-taxonomy diagnostics to the local real-repo navigation eval so missed expected files and noisy reads are classified into actionable improvement buckets.
 - Add a local real-repo navigation eval showing CodeMap search+context value against rg-like lexical baselines on Macrolens, Alpha Cycles, and Pi extension repos.
