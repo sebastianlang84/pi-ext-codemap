@@ -14,7 +14,7 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
 
 - **TypeScript-Pfadaliasse — Restgrenzen**: Minimaler `tsconfig.json` / `jsconfig.json` `baseUrl` + `paths`-Support ist umgesetzt; offen bleiben komplexe `extends`-Ketten, Workspace-Aliasse und Budget-Ordering bei vielen Alias-Imports.
 - **Framework-/Konventions-Nachbarn**: relevante Dateien sind teils nicht über direkte Imports verbunden, sondern über Namens-/Framework-Konventionen, z. B. UI-zu-API, Route-Handler, Provider oder Config-Dateien. Source→Test-Budget-Ordering und ein importierter Source→Test-Nachbar sind als kleine Verticals geschützt; weitere Konventionen brauchen eigene Eval-/Fixture-Belege.
-- **Natürlichere Bug-/Änderungsanfragen**: aktueller Real-Repo-Gate ist symbol-/entrypoint-lastig und beweist nicht beliebige natürliche Bugreports.
+- **Natürlichere Bug-/Änderungsanfragen — Restgrenzen**: Real-Repo-Eval enthält jetzt einen kleinen Natural-Language-Holdout ohne exakte Symbolnamen. Offen bleibt ein größerer, stabiler Holdout für beliebige Bugreports; der aktuelle Satz ist noch lokal und klein.
 - **False positives / verbotene Reads**: lexical liest im Real-Repo-Gate häufiger verbotene/noisy Dateien; CodeMap vermeidet sie aktuell, aber neue Heuristiken können Noise zurückbringen.
 
 ## Nächste sinnvolle Slices — vorgeschlagene Reihenfolge
@@ -27,9 +27,9 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Ziel: prüfen, ob AST-Beziehungen CodeMap-Context verbessern, ohne CodeMap zu einem vollständigen ast-grep-Ersatz zu machen.
    - Scope: zuerst eval-/index-intern und optional; keine harte Runtime-Abhängigkeit und kein neues prompt-facing Tool, bevor Recall/Budget/Noise klar besser sind.
 
-3. [ ] Natural-language Navigation Holdout ergänzen.
-   - Ziel: Fälle ohne exakten Symbolnamen, z. B. “Newsletter-Dashboard lädt FINRA Snapshot falsch”, gegen `rg/find`, `codemap_search`, `codemap_search+context` messen.
-   - Gate: verhindert Overfitting auf symbol-/entrypoint-lastige Queries.
+3. [ ] Query-formulation/Unknown-Misses gezielt diagnostizieren.
+   - Aktueller Befund: `codemap_search_context` hat im Baseline-Kohort keine Alias-/Missing-Symbol-/Convention-Misses mehr; übrig sind Query-Formulation- und Unknown-Misses.
+   - Regel: zuerst pro Miss erklären, ob Ground Truth, Query, Search-Ranking oder Context-Selektion falsch ist; erst danach einen kleinen messbaren Vertical wählen.
 
 ## Parked / später
 

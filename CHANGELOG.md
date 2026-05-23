@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add a natural-language holdout cohort to the local real-repo navigation eval so symbol-heavy navigation gains remain visible separately from symptom-style queries.
 - Include one imported local neighbor's convention sibling test in small `codemap_context` read-first budgets when direct imports bring the source file in.
 - Reduce generic `implementation` role-intent noise so broad source entrypoints do not outrank more specific CodeMap search hits in local real-repo navigation.
 - Add per-case navigation diagnostics to the local real-repo eval: search top hits, context target, read-first reasons, and entry-coupled miss explanations.

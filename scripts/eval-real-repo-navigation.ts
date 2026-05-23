@@ -11,8 +11,11 @@ import { classifyMisses, emptyClassCounts, summarizeMissTaxonomy, type MissClass
 import { indexRepo, status as indexStatus } from "../src/core/indexer.ts";
 import { searchCodeMap } from "../src/core/search.ts";
 
+type TaskCohort = "baseline" | "natural_holdout";
+
 interface RealRepoTask {
   name: string;
+  cohort?: TaskCohort;
   query: string;
   pathPrefix?: string;
   entry: string;
@@ -31,6 +34,7 @@ interface CaseReport {
   repo: string;
   root: string;
   task: string;
+  cohort: TaskCohort;
   mode: NavigationMode;
   query: string;
   pathPrefix: string;
@@ -90,6 +94,17 @@ interface ModeMetrics {
   missTaxonomy: MissTaxonomySummary;
 }
 
+interface CohortReport {
+  cohort: TaskCohort;
+  tasks: number;
+  modes: ModeMetrics[];
+  missTaxonomy: MissTaxonomySummary;
+  deltas: {
+    searchContextVsLexical: DeltaMetrics;
+    searchContextVsSearch: DeltaMetrics;
+  };
+}
+
 interface RepoReport {
   label: string;
   root: string;
@@ -105,6 +120,7 @@ interface EvalReport {
   stateDir: string;
   repos: RepoReport[];
   modes: ModeMetrics[];
+  cohorts: CohortReport[];
   missTaxonomy: MissTaxonomySummary;
   deltas: {
     searchContextVsLexical: DeltaMetrics;
@@ -127,6 +143,9 @@ interface ParsedArgs {
   limit: number;
   maxP95LatencyMs: number;
   minTasks: number;
+  minNaturalHoldoutTasks: number;
+  minNaturalHoldoutExpectedRecall: number;
+  minNaturalHoldoutContextRecall: number;
   minSuccessDeltaVsLexical: number;
   minContextRecallDeltaVsSearch: number;
 }
@@ -134,6 +153,7 @@ interface ParsedArgs {
 type NavigationMode = "lexical" | "codemap_search" | "codemap_search_context";
 
 const modes: NavigationMode[] = ["lexical", "codemap_search", "codemap_search_context"];
+const taskCohorts: TaskCohort[] = ["baseline", "natural_holdout"];
 const home = homedir();
 const defaultSuites: RealRepoSuite[] = [
   {
@@ -166,6 +186,14 @@ const defaultSuites: RealRepoSuite[] = [
         forbidden: ["apps/web/package-lock.json", "package-lock.json", ".agents/memory/daily/2026-03-12-rsi-score-cutover.md"],
         missHints: { "apps/web/src/lib/series-analysis.ts": "alias" },
       },
+      {
+        name: "NL holdout newsletter stale macro snapshot",
+        cohort: "natural_holdout",
+        query: "newsletter macro article shows wrong FINRA snapshot after dashboard refresh",
+        entry: "apps/web/src/lib/newsletter-macro-snapshot.ts",
+        requiredContext: ["apps/web/src/lib/__tests__/newsletter-macro-snapshot.test.ts"],
+        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
+      },
     ],
   },
   {
@@ -175,6 +203,14 @@ const defaultSuites: RealRepoSuite[] = [
       {
         name: "controlled run trigger API",
         query: "trigger_run implementation confirm true run already in progress FastAPI",
+        entry: "api/app.py",
+        requiredContext: ["docker-compose.webapp.yml", "PRD_webapp.md"],
+        forbidden: ["ui/package-lock.json"],
+      },
+      {
+        name: "NL holdout duplicate run rejection",
+        cohort: "natural_holdout",
+        query: "FastAPI confirm true run already in progress",
         entry: "api/app.py",
         requiredContext: ["docker-compose.webapp.yml", "PRD_webapp.md"],
         forbidden: ["ui/package-lock.json"],
@@ -199,6 +235,14 @@ const defaultSuites: RealRepoSuite[] = [
         requiredContext: ["test/pi-extension/retrieval.test.ts", "src/pi-extension/turn-intake.ts"],
         forbidden: ["package-lock.json"],
       },
+      {
+        name: "NL holdout stored memory hint",
+        cohort: "natural_holdout",
+        query: "Use memory_search if prior context matters no relevant stored context",
+        entry: "src/pi-extension/retrieval.ts",
+        requiredContext: ["test/pi-extension/retrieval.test.ts"],
+        forbidden: ["package-lock.json"],
+      },
     ],
   },
   {
@@ -210,6 +254,13 @@ const defaultSuites: RealRepoSuite[] = [
         query: "normalizeSubagentRequest implementation too many parallel tasks exactly one mode",
         entry: "src/request.ts",
         requiredContext: ["tests/request.test.mjs", "src/execution.ts"],
+      },
+      {
+        name: "NL holdout invalid subagent request shape",
+        cohort: "natural_holdout",
+        query: "reject subagent request when parallel tasks and single task are both set",
+        entry: "src/request.ts",
+        requiredContext: ["tests/request.test.mjs"],
       },
     ],
   },
@@ -246,6 +297,9 @@ function parseArgs(args: string[]): ParsedArgs {
   let limit = 5;
   let maxP95LatencyMs = 500;
   let minTasks = 8;
+  let minNaturalHoldoutTasks = 4;
+  let minNaturalHoldoutExpectedRecall = 0.75;
+  let minNaturalHoldoutContextRecall = 0.75;
   let minSuccessDeltaVsLexical = 0.2;
   let minContextRecallDeltaVsSearch = 0.2;
   for (let i = 0; i < args.length; i++) {
@@ -271,6 +325,15 @@ function parseArgs(args: string[]): ParsedArgs {
     } else if (name === "--min-tasks") {
       minTasks = parsePositiveInteger(name, value);
       if (inlineValue === undefined) i++;
+    } else if (name === "--min-natural-holdout-tasks") {
+      minNaturalHoldoutTasks = parsePositiveInteger(name, value);
+      if (inlineValue === undefined) i++;
+    } else if (name === "--min-natural-holdout-expected-recall") {
+      minNaturalHoldoutExpectedRecall = parseNonNegativeNumber(name, value);
+      if (inlineValue === undefined) i++;
+    } else if (name === "--min-natural-holdout-context-recall") {
+      minNaturalHoldoutContextRecall = parseNonNegativeNumber(name, value);
+      if (inlineValue === undefined) i++;
     } else if (name === "--min-success-delta-vs-lexical") {
       minSuccessDeltaVsLexical = parseNonNegativeNumber(name, value);
       if (inlineValue === undefined) i++;
@@ -283,7 +346,7 @@ function parseArgs(args: string[]): ParsedArgs {
       throw new Error(`Unexpected positional argument: ${arg}`);
     }
   }
-  return { gateEnabled, keepState, requireRepos, limit, maxP95LatencyMs, minTasks, minSuccessDeltaVsLexical, minContextRecallDeltaVsSearch };
+  return { gateEnabled, keepState, requireRepos, limit, maxP95LatencyMs, minTasks, minNaturalHoldoutTasks, minNaturalHoldoutExpectedRecall, minNaturalHoldoutContextRecall, minSuccessDeltaVsLexical, minContextRecallDeltaVsSearch };
 }
 
 function runEval(options: ParsedArgs, stateDir: string): EvalReport {
@@ -298,6 +361,7 @@ function runEval(options: ParsedArgs, stateDir: string): EvalReport {
     stateDir,
     repos,
     modes: aggregateModes,
+    cohorts: taskCohorts.map((cohort) => metricsForCohort(cohort, allCases)).filter((item) => item.tasks > 0),
     missTaxonomy: summarizeMissTaxonomy(allCases.flatMap((item) => item.misses)),
     deltas: {
       searchContextVsLexical: delta(searchContext, lexical),
@@ -356,6 +420,7 @@ function evaluateTask(options: { suite: RealRepoSuite; stateDir: string; mode: N
     repo: suite.label,
     root: suite.root,
     task: task.name,
+    cohort: task.cohort ?? "baseline",
     mode,
     query: task.query,
     pathPrefix: task.pathPrefix ?? "",
@@ -483,9 +548,11 @@ function evaluateGate(report: EvalReport, options: ParsedArgs): { passed: boolea
   const issues: Array<{ label: string; metric: string; expected: string; actual: number | string }> = [];
   const skipped = report.repos.filter((repo) => repo.skipped);
   if (options.requireRepos) for (const repo of skipped) issues.push({ label: repo.label, metric: "repo", expected: "present", actual: repo.skipped ?? "skipped" });
-  const searchContext = metric(report.modes, "codemap_search_context");
-  const lexical = metric(report.modes, "lexical");
-  const search = metric(report.modes, "codemap_search");
+  const baseline = cohortMetric(report, "baseline");
+  const naturalHoldout = cohortMetric(report, "natural_holdout");
+  const searchContext = metric(baseline.modes, "codemap_search_context");
+  const lexical = metric(baseline.modes, "lexical");
+  const search = metric(baseline.modes, "codemap_search");
   const successDelta = searchContext.successRate - lexical.successRate;
   const contextRecallDelta = searchContext.avgContextRecall - search.avgContextRecall;
   if (searchContext.tasks < options.minTasks) issues.push({ label: searchContext.mode, metric: "tasks", expected: `>= ${options.minTasks}`, actual: searchContext.tasks });
@@ -495,7 +562,36 @@ function evaluateGate(report: EvalReport, options: ParsedArgs): { passed: boolea
   if (searchContext.avgExpectedRecall <= lexical.avgExpectedRecall) issues.push({ label: searchContext.mode, metric: "expectedRecallVsLexical", expected: `> ${lexical.avgExpectedRecall}`, actual: searchContext.avgExpectedRecall });
   if (searchContext.forbiddenReadRate > 0) issues.push({ label: searchContext.mode, metric: "forbiddenReadRate", expected: "0", actual: searchContext.forbiddenReadRate });
   if (searchContext.p95LatencyMs > options.maxP95LatencyMs) issues.push({ label: searchContext.mode, metric: "p95LatencyMs", expected: `<= ${options.maxP95LatencyMs}`, actual: searchContext.p95LatencyMs });
+  const holdoutSearchContext = metric(naturalHoldout.modes, "codemap_search_context");
+  if (holdoutSearchContext.tasks < options.minNaturalHoldoutTasks) issues.push({ label: "natural_holdout", metric: "tasks", expected: `>= ${options.minNaturalHoldoutTasks}`, actual: holdoutSearchContext.tasks });
+  if (holdoutSearchContext.avgExpectedRecall < options.minNaturalHoldoutExpectedRecall) issues.push({ label: "natural_holdout", metric: "avgExpectedRecall", expected: `>= ${options.minNaturalHoldoutExpectedRecall}`, actual: holdoutSearchContext.avgExpectedRecall });
+  if (holdoutSearchContext.avgContextRecall < options.minNaturalHoldoutContextRecall) issues.push({ label: "natural_holdout", metric: "avgContextRecall", expected: `>= ${options.minNaturalHoldoutContextRecall}`, actual: holdoutSearchContext.avgContextRecall });
+  if (holdoutSearchContext.forbiddenReadRate > 0) issues.push({ label: "natural_holdout", metric: "forbiddenReadRate", expected: "0", actual: holdoutSearchContext.forbiddenReadRate });
   return { passed: issues.length === 0, issues };
+}
+
+function metricsForCohort(cohort: TaskCohort, cases: CaseReport[]): CohortReport {
+  const cohortCases = cases.filter((item) => item.cohort === cohort);
+  const cohortModes = modes.map((mode) => metricsFor(mode, cohortCases));
+  const searchContext = metric(cohortModes, "codemap_search_context");
+  const lexical = metric(cohortModes, "lexical");
+  const search = metric(cohortModes, "codemap_search");
+  return {
+    cohort,
+    tasks: searchContext.tasks,
+    modes: cohortModes,
+    missTaxonomy: summarizeMissTaxonomy(cohortCases.flatMap((item) => item.misses)),
+    deltas: {
+      searchContextVsLexical: delta(searchContext, lexical),
+      searchContextVsSearch: delta(searchContext, search),
+    },
+  };
+}
+
+function cohortMetric(report: EvalReport, cohort: TaskCohort): CohortReport {
+  const found = report.cohorts.find((item) => item.cohort === cohort);
+  if (found) return found;
+  return metricsForCohort(cohort, []);
 }
 
 function metric(metrics: ModeMetrics[], mode: NavigationMode): ModeMetrics {
