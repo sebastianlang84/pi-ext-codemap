@@ -6,7 +6,7 @@ import { basename, join } from "node:path";
 import { performance } from "node:perf_hooks";
 
 import { codemapContext } from "../src/core/context.ts";
-import { explainNavigationMisses, type NavigationMissExplanation } from "../src/core/eval-navigation-diagnostics.ts";
+import { explainNavigationMisses, summarizeNavigationMissReasons, type NavigationMissExplanation, type NavigationMissReasonSummary } from "../src/core/eval-navigation-diagnostics.ts";
 import { classifyMisses, emptyClassCounts, summarizeMissTaxonomy, type MissClass, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
 import { indexRepo, status as indexStatus } from "../src/core/indexer.ts";
 import { searchCodeMap } from "../src/core/search.ts";
@@ -92,6 +92,7 @@ interface ModeMetrics {
   avgLatencyMs: number;
   p95LatencyMs: number;
   missTaxonomy: MissTaxonomySummary;
+  navigationMissReasons: NavigationMissReasonSummary;
 }
 
 interface CohortReport {
@@ -541,6 +542,7 @@ function metricsFor(mode: NavigationMode, cases: CaseReport[]): ModeMetrics {
     avgLatencyMs: roundMs(avg(latencies)),
     p95LatencyMs: roundMs(p95(latencies)),
     missTaxonomy: summarizeMissTaxonomy(modeCases.flatMap((item) => item.misses)),
+    navigationMissReasons: summarizeNavigationMissReasons(modeCases.flatMap((item) => item.navigationDiagnostics.missingExpected)),
   };
 }
 

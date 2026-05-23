@@ -15,6 +15,32 @@ export interface NavigationMissExplanation {
   detail: string;
 }
 
+export interface NavigationMissReasonSummary {
+  total: number;
+  byReason: Record<NavigationMissReason, number>;
+  examples: NavigationMissExplanation[];
+}
+
+const navigationMissReasons: NavigationMissReason[] = [
+  "lexical_terms_or_limit",
+  "search_entry_miss",
+  "search_only_context_not_expanded",
+  "context_entry_miss",
+  "context_neighbor_unreachable",
+  "context_target_mismatch",
+  "context_budget_or_relationship",
+];
+
+export function summarizeNavigationMissReasons(explanations: NavigationMissExplanation[], exampleLimit = 8): NavigationMissReasonSummary {
+  const byReason = emptyNavigationMissReasonCounts();
+  for (const item of explanations) byReason[item.reason]++;
+  return { total: explanations.length, byReason, examples: explanations.slice(0, exampleLimit) };
+}
+
+export function emptyNavigationMissReasonCounts(): Record<NavigationMissReason, number> {
+  return Object.fromEntries(navigationMissReasons.map((item) => [item, 0])) as Record<NavigationMissReason, number>;
+}
+
 export function explainNavigationMisses(input: {
   mode: EvalNavigationMode;
   entry: string;

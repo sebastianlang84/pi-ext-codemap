@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add navigation-miss reason summaries to the local real-repo navigation eval so remaining taxonomy misses are split by context-target mismatch versus context relationship/budget gaps.
 - Add a natural-language holdout cohort to the local real-repo navigation eval so symbol-heavy navigation gains remain visible separately from symptom-style queries.
 - Include one imported local neighbor's convention sibling test in small `codemap_context` read-first budgets when direct imports bring the source file in.
 - Reduce generic `implementation` role-intent noise so broad source entrypoints do not outrank more specific CodeMap search hits in local real-repo navigation.

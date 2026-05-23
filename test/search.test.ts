@@ -11,7 +11,7 @@ process.env.HOME = storageHome;
 process.env.USERPROFILE = storageHome;
 after(() => rmSync(storageHome, { recursive: true, force: true }));
 
-const { explainNavigationMisses } = await import("../src/core/eval-navigation-diagnostics.ts");
+const { explainNavigationMisses, summarizeNavigationMissReasons } = await import("../src/core/eval-navigation-diagnostics.ts");
 const { classifyMisses, summarizeMissTaxonomy } = await import("../src/core/eval-miss-taxonomy.ts");
 const { indexRepo, status } = await import("../src/core/indexer.ts");
 const { planQuery } = await import("../src/core/query-plan.ts");
@@ -97,6 +97,36 @@ test("real-repo eval navigation diagnostics explain entry-coupled context misses
     ["src/pi-extension/retrieval.ts", "context_entry_miss"],
     ["test/pi-extension/retrieval.test.ts", "context_neighbor_unreachable"],
   ]);
+});
+
+test("real-repo eval summarizes navigation miss reasons", () => {
+  const targetMismatch = explainNavigationMisses({
+    mode: "codemap_search_context",
+    entry: "src/pi-extension/tools.ts",
+    requiredContext: ["src/pi-extension/tag-catalog.ts", "src/pi-extension/formatters.ts"],
+    missingExpectedFiles: ["src/pi-extension/tag-catalog.ts", "src/pi-extension/formatters.ts"],
+    filesRead: ["test/pi-extension/tools.test.ts", "src/pi-extension/tools.ts"],
+    searchPaths: ["test/pi-extension/tools.test.ts", "src/pi-extension/tools.ts", "src/pi-extension/tag-catalog.ts"],
+    contextTarget: "test/pi-extension/tools.test.ts",
+    readFirstPaths: ["test/pi-extension/tools.test.ts", "src/pi-extension/tools.ts"],
+  });
+  const relationshipGap = explainNavigationMisses({
+    mode: "codemap_search_context",
+    entry: "src/request.ts",
+    requiredContext: ["src/execution.ts"],
+    missingExpectedFiles: ["src/execution.ts"],
+    filesRead: ["src/request.ts", "tests/request.test.mjs"],
+    searchPaths: ["src/request.ts"],
+    contextTarget: "src/request.ts",
+    readFirstPaths: ["src/request.ts", "tests/request.test.mjs"],
+  });
+
+  const summary = summarizeNavigationMissReasons([...targetMismatch, ...relationshipGap]);
+
+  assert.equal(summary.total, 3);
+  assert.equal(summary.byReason.context_target_mismatch, 2);
+  assert.equal(summary.byReason.context_budget_or_relationship, 1);
+  assert.deepEqual(summary.examples.map((item) => item.reason), ["context_target_mismatch", "context_target_mismatch", "context_budget_or_relationship"]);
 });
 
 test("real-repo eval miss taxonomy classifies actionable misses", () => {
