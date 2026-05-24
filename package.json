@@ -1,6 +1,6 @@
 {
   "name": "pi-ext-codemap",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Lightweight local SQLite/FTS repo map for Pi coding agents: code, docs, config search, and read-first context.",
   "type": "module",
   "keywords": [
@@ -38,6 +38,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test test/*.test.ts",
+    "verify": "npm run typecheck && npm test && npm run bench:search-quality:gate && npm run bench:context-quality:gate && npm run eval:agent-navigation:gate && npm run eval:real-repo-navigation:gate && npm run check:token-injection",
     "bench:search-quality": "node --experimental-strip-types scripts/bench-search-quality.ts --fixtures",
     "bench:search-quality:gate": "node --experimental-strip-types scripts/bench-search-quality.ts --quality-gate --fixtures",
     "bench:search-quality:local": "node --experimental-strip-types scripts/bench-search-quality.ts --local-repos",

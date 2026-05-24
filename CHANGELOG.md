@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.6.1 - 2026-05-25
+
+- Add `npm run verify` as a local closeout gate that chains existing typecheck, tests, quality gates, and token-injection checks.
+- Add stable miss-taxonomy summaries to the deterministic agent-navigation eval report, matching the real-repo eval classes and bounded examples.
+
 ## 0.6.0 - 2026-05-25
 
 - Link Next.js-style route adapter files with convention-named `*handler*` sources and their tests in `codemap_context` read-first output without adding new reason kinds or public tool schema.

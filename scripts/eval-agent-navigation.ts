@@ -7,6 +7,7 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { codemapContext } from "../src/core/context.ts";
+import { classifyMisses, summarizeMissTaxonomy, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
 import { indexRepo } from "../src/core/indexer.ts";
 import { mergeSearchContextReadPlan } from "../src/core/navigation-read-plan.ts";
 import { searchCodeMap } from "../src/core/search.ts";
@@ -26,6 +27,10 @@ interface NavigationCaseReport {
   query: string;
   pathPrefix: string;
   entry: string;
+  expectedFiles: number;
+  foundExpectedFiles: number;
+  expectedRecall: number;
+  missingExpectedFiles: string[];
   filesRead: string[];
   entryFound: boolean;
   requiredContext: number;
@@ -33,6 +38,7 @@ interface NavigationCaseReport {
   missingContext: string[];
   contextRecall: number;
   forbiddenRead: string[];
+  misses: MissDiagnostic[];
   success: boolean;
   toolCalls: number;
   latencyMs: number;
@@ -43,12 +49,14 @@ interface ModeMetrics {
   tasks: number;
   successRate: number;
   entryHitRate: number;
+  avgExpectedRecall: number;
   avgContextRecall: number;
   avgFilesRead: number;
   avgToolCalls: number;
   forbiddenReadRate: number;
   avgLatencyMs: number;
   p95LatencyMs: number;
+  missTaxonomy: MissTaxonomySummary;
 }
 
 interface EvalReport {
@@ -57,6 +65,7 @@ interface EvalReport {
   indexed: ReturnType<typeof indexRepo>;
   modes: ModeMetrics[];
   cases: NavigationCaseReport[];
+  missTaxonomy: MissTaxonomySummary;
 }
 
 interface GateIssue {
@@ -166,7 +175,14 @@ function runEval(options: ParsedArgs, stateDir: string): EvalReport {
   const root = prepareFixtureRepo(stateDir);
   const indexed = indexRepo({ cwd: root, approve: true, stateDir });
   const cases = modes.flatMap((mode) => tasks.map((task) => evaluateTask({ root, stateDir, mode, task, limit: options.limit })));
-  return { root, readLimit: options.limit, indexed, modes: modes.map((mode) => metricsFor(mode, cases)), cases };
+  return {
+    root,
+    readLimit: options.limit,
+    indexed,
+    modes: modes.map((mode) => metricsFor(mode, cases)),
+    cases,
+    missTaxonomy: summarizeMissTaxonomy(cases.flatMap((item) => item.misses)),
+  };
 }
 
 function prepareFixtureRepo(stateDir: string): string {
@@ -183,17 +199,32 @@ function evaluateTask(options: { root: string; stateDir: string; mode: Navigatio
   const [latencyMs, filesRead] = timed(() => navigate({ root, stateDir, mode, task, limit }));
   const uniqueFilesRead = uniqueStrings(filesRead);
   const found = new Set(uniqueFilesRead);
+  const expected = uniqueStrings([task.entry, ...task.requiredContext]);
+  const missingExpectedFiles = expected.filter((path) => !found.has(path));
   const missingContext = task.requiredContext.filter((path) => !found.has(path));
   const forbiddenRead = (task.forbidden ?? []).filter((path) => found.has(path));
   const entryFound = found.has(task.entry);
+  const foundExpectedFiles = expected.length - missingExpectedFiles.length;
   const foundContext = task.requiredContext.length - missingContext.length;
   const contextRecall = rate(foundContext, task.requiredContext.length);
+  const misses = classifyMisses({
+    query: task.query,
+    entry: task.entry,
+    requiredContext: task.requiredContext,
+    missingExpectedFiles,
+    forbiddenRead,
+    indexStale: false,
+  });
   return {
     task: task.name,
     mode,
     query: task.query,
     pathPrefix: task.pathPrefix ?? "",
     entry: task.entry,
+    expectedFiles: expected.length,
+    foundExpectedFiles,
+    expectedRecall: rate(foundExpectedFiles, expected.length),
+    missingExpectedFiles,
     filesRead: uniqueFilesRead,
     entryFound,
     requiredContext: task.requiredContext.length,
@@ -201,6 +232,7 @@ function evaluateTask(options: { root: string; stateDir: string; mode: Navigatio
     missingContext,
     contextRecall,
     forbiddenRead,
+    misses,
     success: entryFound && contextRecall === 1 && forbiddenRead.length === 0,
     toolCalls: mode === "codemap_search_context" ? 2 : 1,
     latencyMs: roundMs(latencyMs),
@@ -252,12 +284,14 @@ function metricsFor(mode: NavigationMode, cases: NavigationCaseReport[]): ModeMe
     tasks: modeCases.length,
     successRate: rate(modeCases.filter((item) => item.success).length, modeCases.length),
     entryHitRate: rate(modeCases.filter((item) => item.entryFound).length, modeCases.length),
+    avgExpectedRecall: roundRate(avg(modeCases.map((item) => item.expectedRecall))),
     avgContextRecall: roundRate(avg(modeCases.map((item) => item.contextRecall))),
     avgFilesRead: roundRate(avg(modeCases.map((item) => item.filesRead.length))),
     avgToolCalls: roundRate(avg(modeCases.map((item) => item.toolCalls))),
     forbiddenReadRate: rate(modeCases.filter((item) => item.forbiddenRead.length > 0).length, modeCases.length),
     avgLatencyMs: roundMs(avg(latencies)),
     p95LatencyMs: roundMs(p95(latencies)),
+    missTaxonomy: summarizeMissTaxonomy(modeCases.flatMap((item) => item.misses)),
   };
 }
 

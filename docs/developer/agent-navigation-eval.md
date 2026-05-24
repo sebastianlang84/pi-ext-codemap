@@ -29,23 +29,25 @@ Per mode, the eval reports:
 
 - `successRate`: entry file found, all required context found, and no forbidden/noisy file read.
 - `entryHitRate`: expected entry file was read.
+- `avgExpectedRecall`: recall over entry + required context files.
 - `avgContextRecall`: fraction of required neighbors read.
 - `avgFilesRead`: unique files read by the mode.
 - `avgToolCalls`: scripted tool-call count for the mode.
 - `forbiddenReadRate`: tasks where generated/build/lockfile/cross-prefix noise was read.
 - `avgLatencyMs` and `p95LatencyMs`.
+- `missTaxonomy`: aggregate `byClass` counts and bounded examples for missing expected files plus forbidden/noisy reads. Classes match the real-repo eval: `alias`, `convention`, `missing_symbol`, `noise`, `staleness`, `query_formulation`, and `unknown`.
 
-The gate currently requires `codemap_search_context` to reach full success/entry/context recall, avoid forbidden reads, stay under the latency threshold, and improve context recall over plain `codemap_search` with the same read budget.
+The gate currently requires `codemap_search_context` to reach full success/entry/context recall, avoid forbidden reads, stay under the latency threshold, and improve context recall over plain `codemap_search` with the same read budget. The taxonomy is diagnostic, not a gate by itself.
 
 ## Current fixture result
 
-On 2026-05-23, `npm run eval:agent-navigation:gate` passed on 4 fixture tasks with the default 8-file read budget:
+On 2026-05-25, `npm run eval:agent-navigation:gate` passed on 4 fixture tasks with the default 8-file read budget:
 
-| Mode | Success | Entry hit | Context recall | Forbidden read | Avg files | p95 latency |
-|---|---:|---:|---:|---:|---:|---:|
-| `lexical` | 0.50 | 1.00 | 0.667 | 0.25 | 4.00 | 11.840 ms |
-| `codemap_search` | 0.50 | 1.00 | 0.667 | 0.00 | 2.75 | 15.300 ms |
-| `codemap_search_context` | 1.00 | 1.00 | 1.000 | 0.00 | 4.25 | 33.120 ms |
+| Mode | Success | Entry hit | Expected recall | Context recall | Forbidden read | Avg files | p95 latency |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `lexical` | 0.50 | 1.00 | 0.738 | 0.667 | 0.25 | 4.00 | 11.685 ms |
+| `codemap_search` | 0.50 | 1.00 | 0.738 | 0.667 | 0.00 | 2.75 | 15.543 ms |
+| `codemap_search_context` | 1.00 | 1.00 | 1.000 | 1.000 | 0.00 | 4.50 | 33.340 ms |
 
 Interpretation for this fixture: `codemap_search` is good at finding entry files and sometimes already surfaces query-relevant neighbors; `codemap_context` supplies the missing relationship neighbors when search-only is sparse.
 

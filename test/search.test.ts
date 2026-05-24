@@ -165,6 +165,20 @@ test("real-repo eval miss taxonomy classifies actionable misses", () => {
   assert.equal(summary.byClass.alias, 1);
 });
 
+test("agent navigation eval report includes stable miss taxonomy summaries", () => {
+  const output = execFileSync(process.execPath, ["--experimental-strip-types", "scripts/eval-agent-navigation.ts", "--fixtures", "--limit", "1"], { encoding: "utf8" });
+  const parsed = JSON.parse(output);
+  const taxonomy = parsed.report.missTaxonomy;
+  assert.equal(typeof taxonomy.total, "number");
+  assert.deepEqual(Object.keys(taxonomy.byClass), ["alias", "convention", "missing_symbol", "noise", "staleness", "query_formulation", "unknown"]);
+  assert.ok(Array.isArray(taxonomy.examples));
+  assert.ok(taxonomy.total > 0);
+  assert.equal(typeof parsed.report.modes[0].avgExpectedRecall, "number");
+  assert.equal(typeof parsed.report.modes[0].missTaxonomy.byClass.unknown, "number");
+  assert.equal(typeof parsed.report.cases[0].expectedRecall, "number");
+  assert.ok(Array.isArray(parsed.report.cases[0].misses));
+});
+
 test("search+context read plan preserves visible search hits within the read budget", () => {
   assert.deepEqual(
     mergeSearchContextReadPlan(

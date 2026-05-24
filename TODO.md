@@ -19,14 +19,24 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
 
 ## Nächste sinnvolle Slices — vorgeschlagene Reihenfolge
 
-1. [ ] Nächsten Expanded-Natural-Holdout-Fix-Slice nur bei neuem konkretem Miss auswählen.
+1. [ ] Internen Ranking-/Context-Debug-Report für Eval-Misses ergänzen.
+   - Scope: nur Bench-/Eval-/Testpfad; Score-Komponenten, ausgewählte/verworfene Search-Hits, Context-Target, `readFirst`-Reasons und Read-Plan-Budget sichtbar machen.
+   - Nutzen: Ranking-/Context-Änderungen werden nachvollziehbar, ohne `codemap_search`-Resultate aufzublähen.
+   - Verifikation: gezielte Tests/Bench-Ausgabe zeigen die erwarteten Komponenten; Public `SearchResult` bleibt kompakt.
+
+2. [ ] Nächsten Expanded-Natural-Holdout-Fix-Slice nur bei neuem konkretem Miss auswählen.
    - Aktueller Release-Stand: Baseline und Natural-Holdout waren vor `0.5.3` voll grün; alte Miss-Listen nicht als aktive Defekte behandeln.
    - Regel: erst Diagnose/öffentlicher Regressionstest, dann maximal ein Hebel; keine Query-/Threshold-Änderung als Ersatz für Systemverbesserung.
 
-2. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
+3. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
    - Erledigt: Route↔Handler ist als enge Next.js-Route-Adapter-zu-`*handler*`-Quelle plus Handler-Test-Fixture umgesetzt.
    - Nächste Kandidaten: UI↔API, Provider/Hook↔Consumer, Config-Key↔Nutzung; Source↔Test nur wieder anfassen, wenn ein neuer Eval-Miss nicht durch Entry/Search-Ranking verursacht ist.
    - Regel: pro Konvention ein Fixture/Real-Repo-Case, eigene Metrik, keine breite Heuristik ohne messbaren Gewinn.
+
+4. [ ] Workspace-/Multi-Config-Pfadalias nur als gated Slice angehen.
+   - Scope: erst bei konkretem Miss mit `tsconfig`/`jsconfig` `extends`, Workspace-Alias oder vielen Alias-Imports; dann minimalen Resolver/Ordering-Fix bauen.
+   - Nutzen: TS/JS-Alias-Restgrenzen bleiben sichtbar, ohne Resolver-Komplexität auf Vorrat einzubauen.
+   - Verifikation: ein Fixture oder Real-Repo-Case belegt den Miss und die Verbesserung; keine breite Alias-Heuristik ohne Qualitätsgewinn.
 
 ## Parked / später
 
@@ -38,7 +48,12 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Voraussetzungen: stabile maschinenlesbare Metriken, feste Trainings-/Validierungs-Cases, Holdout-Guardrails und keine Optimierung nur auf ein privates lokales Repo.
    - Kandidaten: File-Rollen-Boosts, Noise-Penalties, Symbol-/Path-/Filename-/FTS-Gewichte, Token-Coverage-Bonus, Intent-Heuristiken, Context-Nachbarschaftsbudget.
 
-3. [ ] Refresh-Automation nur bei breiterem Eval-/Praxisbedarf wieder aufnehmen.
+3. [ ] Separaten Semantic-Benchmark-Track vorbereiten, bevor Semantik implementiert wird.
+   - Scope: Eval-Gerüst/Profil für optionale Embeddings/Reranker mit Qualität, Latenz, RAM, Indexgröße und False-Positive-Metriken; kein Default-Embedding und keine Produktzusage.
+   - Nutzen: Semantik bleibt messbar und opt-in statt ein schwerer Default-Pfad zu werden.
+   - Verifikation: Standalone-Report vergleicht Varianten gegen feste Cases; bestehende lexikalische Gates bleiben unverändert.
+
+4. [ ] Refresh-Automation nur bei breiterem Eval-/Praxisbedarf wieder aufnehmen.
    - Befund: Agent-Refresh-Eval mit `openai-codex/gpt-5.4-mini`, Baseline + Hint je 3 Runs, bestand 6/6; Agent sah stale Signale, rief `codemap_index`, suchte erneut und nannte `src/calculator.ts`.
    - Entscheidung: LLM-gesteuertes Refresh über bestehende stale Warnungen genügt vorerst; kein Command/Hook als nächster Slice.
    - Wieder aufnehmen, wenn breitere Modelle/Runs scheitern oder Praxis zeigt, dass Agenten stale Warnungen übersehen.

@@ -214,19 +214,22 @@ Coverage expectations:
 - Safety tests: unapproved repos cannot be indexed; paths outside the repo root are rejected.
 - Package/integration tests: the Pi extension loads and each V1 tool validates inputs and returns the documented contract.
 
-Run the standard checks:
+Run the closeout gate when local real-repo eval dependencies are available:
+
+```bash
+npm run verify
+```
+
+`npm run verify` chains typechecking, the test suite, search/context/navigation quality gates, and the token-injection budget check. Because the real-repo navigation gate depends on local repositories, use the individual scripts when that local gate is unavailable.
+
+Useful individual checks:
 
 ```bash
 npm run typecheck
 npm test
 npm run check:token-injection
 npm run audit:lightweight
+npm run bench:search-quality:gate
 ```
 
 `npm run check:token-injection` reports the estimated agent-context cost of registered Pi tools (`description`, `parameters`, `promptSnippet`, and `promptGuidelines`) and fails when the default budgets are exceeded: 190 estimated tokens per tool and 700 estimated tokens total. Slash commands are not counted because they are not injected as tool prompt/schema context.
-
-Run the search-quality gate when changing ranking, query planning, chunking, or symbol extraction:
-
-```bash
-npm run bench:search-quality:gate
-```
