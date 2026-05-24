@@ -174,12 +174,13 @@ For direct file targets, context can include:
 - directly imported/included local files;
 - indexed local files that import/include the target;
 - C/C++ header/source implementation pairs;
+- narrow Next.js-style route↔handler convention pairs when route path terms match `*handler*` source files;
 - nearby configuration files;
 - same-directory source neighbors;
 - likely sibling/reverse tests and source files under test;
 - likely related docs.
 
-Each `readFirst` item may carry `reasons[]` such as `target`, `import`, `reverse_import`, `include`, `reverse_include`, `implementation_pair`, `near_config`, `same_dir`, `test_of`, `sibling_test`, `reverse_test`, or `related_doc`. Relationship extraction is a lightweight core seam in `src/core/relationships.ts`: TypeScript/JavaScript imports, Python explicit relative imports, nearby config files, same-directory source neighbors, test/source roles, C/C++ quoted includes, and path/name test-doc heuristics are supported; full AST/callgraph/package resolution is intentionally out of scope.
+Each `readFirst` item may carry `reasons[]` such as `target`, `import`, `reverse_import`, `include`, `reverse_include`, `implementation_pair`, `near_config`, `same_dir`, `test_of`, `sibling_test`, `reverse_test`, or `related_doc`. Relationship extraction is a lightweight core seam in `src/core/relationships.ts`: TypeScript/JavaScript imports, Python explicit relative imports, nearby config files, same-directory source neighbors, test/source roles, C/C++ quoted includes, narrow route↔handler convention pairs, and path/name test-doc heuristics are supported; full AST/callgraph/package resolution is intentionally out of scope.
 
 Related imports/reverse-imports/includes are resolved from indexed content, so context remains useful even when the working tree is stale. `pathPrefix` must scope context and related-file discovery to the requested subtree.
 

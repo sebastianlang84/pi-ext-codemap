@@ -80,8 +80,9 @@ export function buildCodeMapContext(options: CodeMapContextOptions): CodeMapCont
     const relationships = readFirst.direct ? findIndexedRelationships(db, readFirst.base, request.pathFilter) : { imports: [], importers: [], implementationPairs: [] };
     const importedNeighborTests = readFirst.direct ? importedNeighborTestPaths(db, relationships.imports, request.pathFilter) : [];
     const importerNeighborTests = readFirst.direct ? importerNeighborTestPaths(db, relationships.importers, request.pathFilter) : [];
+    const implementationPairNeighborTests = readFirst.direct ? implementationPairNeighborTestPaths(db, relationships.implementationPairs, request.pathFilter) : [];
     const items = readFirst.direct
-      ? localReadFirstItems(db, readFirst.items, relationships.imports, importedNeighborTests, importerNeighborTests, relationships.implementationPairs, relationships.importers, related.configs, related.tests, related.docs, related.sameDir, related.testOf, request.limit)
+      ? localReadFirstItems(db, readFirst.items, relationships.imports, importedNeighborTests, importerNeighborTests, implementationPairNeighborTests, relationships.implementationPairs, relationships.importers, related.configs, related.tests, related.docs, related.sameDir, related.testOf, request.limit)
       : readFirst.items;
     const lastIndexedAt = diagnostics.lastIndexedAt ?? null;
 
@@ -152,6 +153,7 @@ function localReadFirstItems(
   imports: RelatedPath[],
   importedNeighborTests: RelatedPath[],
   importerNeighborTests: RelatedPath[],
+  implementationPairNeighborTests: RelatedPath[],
   implementationPairs: RelatedPath[],
   importers: RelatedPath[],
   configs: RelatedPath[],
@@ -174,6 +176,7 @@ function localReadFirstItems(
     ...(routeAdapterImporters[0] ? [routeAdapterImporters[0]] : []),
     ...primaryImports,
     ...implementationPairs,
+    ...implementationPairNeighborTests,
     ...(testItems[0] ? [testItems[0]] : []),
     ...(affineImporters[0] ? [affineImporters[0]] : []),
     ...importedNeighborTests,
@@ -276,6 +279,14 @@ function importedNeighborTestPaths(db: ReturnType<typeof openRepoDb>, imports: R
 function importerNeighborTestPaths(db: ReturnType<typeof openRepoDb>, importers: RelatedPath[], pathFilter: string): RelatedPath[] {
   return mergeRelatedPaths(
     importers.filter((item) => !isTestReadFirstPath(item.path)).slice(0, 2).flatMap((item) => findRelatedTestPaths(db, item.path, pathFilter)
+      .slice(0, 1)
+      .map((path) => ({ path, reasons: [relatedTestReason(item.path, path)] }))),
+  ).slice(0, 1);
+}
+
+function implementationPairNeighborTestPaths(db: ReturnType<typeof openRepoDb>, implementationPairs: RelatedPath[], pathFilter: string): RelatedPath[] {
+  return mergeRelatedPaths(
+    implementationPairs.filter((item) => !isTestReadFirstPath(item.path)).slice(0, 2).flatMap((item) => findRelatedTestPaths(db, item.path, pathFilter)
       .slice(0, 1)
       .map((path) => ({ path, reasons: [relatedTestReason(item.path, path)] }))),
   ).slice(0, 1);

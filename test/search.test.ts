@@ -2013,6 +2013,39 @@ export function settleInvoice(id: string) {
   assert.ok(sourceUnderTest?.reasons?.some((reason) => reason.kind === "test_of"), JSON.stringify(testContext.readFirst));
 });
 
+test("context read-first links route adapters with convention-named handlers", (t) => {
+  const root = fixtureRepo(t);
+  mkdirSync(join(root, "apps", "web", "src", "app", "api", "newsletter", "macro"), { recursive: true });
+  mkdirSync(join(root, "apps", "web", "src", "server"), { recursive: true });
+
+  writeFileSync(join(root, "apps", "web", "src", "app", "api", "newsletter", "macro", "route.ts"), `
+export async function GET() {
+  return Response.json({ status: "newsletter macro endpoint ready" });
+}
+`);
+  writeFileSync(join(root, "apps", "web", "src", "server", "newsletter-macro-handler.ts"), `
+export function buildNewsletterMacroResponse() {
+  return { status: "newsletter macro handler ready" };
+}
+`);
+  writeFileSync(join(root, "apps", "web", "src", "server", "newsletter-macro-handler.test.ts"), "import './newsletter-macro-handler';\n");
+  writeFileSync(join(root, "apps", "web", "src", "server", "macro-cleanup-handler.ts"), "export const unrelatedHandler = true;\n");
+  indexRepo({ cwd: root });
+
+  const routeContext = codemapContext({ cwd: root, target: "apps/web/src/app/api/newsletter/macro/route.ts", limit: 5 });
+  const routePaths = routeContext.readFirst.map((item) => item.path);
+  const handler = routeContext.readFirst.find((item) => item.path === "apps/web/src/server/newsletter-macro-handler.ts");
+  const handlerTest = routeContext.readFirst.find((item) => item.path === "apps/web/src/server/newsletter-macro-handler.test.ts");
+
+  assert.equal(routePaths[0], "apps/web/src/app/api/newsletter/macro/route.ts");
+  assert.ok(handler?.reasons?.some((reason) => reason.kind === "implementation_pair"), JSON.stringify(routeContext.readFirst));
+  assert.ok(handlerTest?.reasons?.some((reason) => reason.kind === "sibling_test" && reason.targetPath === "apps/web/src/server/newsletter-macro-handler.ts"), JSON.stringify(routeContext.readFirst));
+  assert.ok(!routePaths.includes("apps/web/src/server/macro-cleanup-handler.ts"), JSON.stringify(routePaths));
+
+  const handlerContext = codemapContext({ cwd: root, target: "apps/web/src/server/newsletter-macro-handler.ts", limit: 4 });
+  assert.ok(handlerContext.readFirst.find((item) => item.path === "apps/web/src/app/api/newsletter/macro/route.ts")?.reasons?.some((reason) => reason.kind === "implementation_pair"), JSON.stringify(handlerContext.readFirst));
+});
+
 test("context read-first includes same-directory source before extra target chunks at default limit", (t) => {
   const root = fixtureRepo(t);
   writeFileSync(join(root, "src", "core", "isolated-widget.ts"), `${Array.from({ length: 90 }, (_, index) => `export const isolatedWidgetLine${index} = ${index};`).join("\n")}\n`);

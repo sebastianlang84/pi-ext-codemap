@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Link Next.js-style route adapter files with convention-named `*handler*` sources and their tests in `codemap_context` read-first output without adding new reason kinds or public tool schema.
+
 ## 0.5.5 - 2026-05-24
 
 - Remove the internal experimental `ast-grep`-supplemented symbol indexing path and comparison benchmark after evals showed no retrieval-quality gain, a local structural Top-1/MRR regression, and measurable index-time cost; optional `ast-grep` remains only benchmark ground truth.

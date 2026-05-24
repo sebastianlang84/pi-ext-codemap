@@ -207,6 +207,13 @@ function indexedFileReferencesTarget(db: ReturnType<typeof openRepoDb>, fromPath
 }
 
 function implementationPairPaths(db: ReturnType<typeof openRepoDb>, targetPath: string, pathFilter: string): RelatedPath[] {
+  return mergeRelatedPaths([
+    ...headerImplementationPairPaths(db, targetPath, pathFilter),
+    ...routeHandlerConventionPaths(db, targetPath, pathFilter),
+  ]).slice(0, 8);
+}
+
+function headerImplementationPairPaths(db: ReturnType<typeof openRepoDb>, targetPath: string, pathFilter: string): RelatedPath[] {
   const extension = targetPath.match(/\.[^.\/]+$/)?.[0]?.toLowerCase();
   const headerExtensions = new Set([".h", ".hh", ".hpp", ".hxx"]);
   const sourceExtensions = new Set([".c", ".cc", ".cpp", ".cxx"]);
@@ -224,6 +231,82 @@ function implementationPairPaths(db: ReturnType<typeof openRepoDb>, targetPath: 
     reasons: [{ kind: "implementation_pair", label: "matching header/source file", sourcePath: targetPath, targetPath: row.path }],
   }));
 }
+
+function routeHandlerConventionPaths(db: ReturnType<typeof openRepoDb>, targetPath: string, pathFilter: string): RelatedPath[] {
+  const pairs = isRouteAdapterPath(targetPath)
+    ? routeHandlerCandidatesForRoute(db, targetPath, pathFilter)
+    : isRouteHandlerPath(targetPath)
+      ? routeAdapterCandidatesForHandler(db, targetPath, pathFilter)
+      : [];
+
+  return sortRelatedByLocality(targetPath, pairs.map((path) => ({
+    path,
+    reasons: [{ kind: "implementation_pair", label: "matching route/handler file", sourcePath: targetPath, targetPath: path }],
+  }))).slice(0, 4);
+}
+
+function routeHandlerCandidatesForRoute(db: ReturnType<typeof openRepoDb>, routePath: string, pathFilter: string): string[] {
+  const routeTerms = routeAdapterTerms(routePath);
+  if (routeTerms.length === 0) return [];
+  return candidateSourceFiles(db, routePath, pathFilter)
+    .filter((row) => isRouteHandlerPath(row.path) && hasAllTerms(row.path, routeTerms))
+    .map((row) => row.path);
+}
+
+function routeAdapterCandidatesForHandler(db: ReturnType<typeof openRepoDb>, handlerPath: string, pathFilter: string): string[] {
+  const handlerTerms = pathTerms(handlerPath);
+  return candidateSourceFiles(db, handlerPath, pathFilter)
+    .filter((row) => isRouteAdapterPath(row.path))
+    .filter((row) => {
+      const routeTerms = routeAdapterTerms(row.path);
+      return routeTerms.length > 0 && routeTerms.every((term) => handlerTerms.has(term) || handlerTerms.has(singular(term)));
+    })
+    .map((row) => row.path);
+}
+
+function candidateSourceFiles(db: ReturnType<typeof openRepoDb>, targetPath: string, pathFilter: string): Array<{ path: string; size: number }> {
+  return (db.prepare("select path, size from files where path <> ? and path like ? escape '\\' order by path")
+    .all(targetPath, pathFilter) as Array<{ path: string; size: number }>)
+    .filter((row) => isCodePath(row.path) && !isNoisyReadFirstPath(row.path, row.size) && !isConfigReadFirstPath(row.path, row.size) && !isTestReadFirstPath(row.path));
+}
+
+function isRouteAdapterPath(path: string): boolean {
+  return /(?:^|\/)app\/api\/.+\/route\.[cm]?[jt]sx?$/i.test(path);
+}
+
+function isRouteHandlerPath(path: string): boolean {
+  const basename = path.toLowerCase().split("/").pop() ?? path.toLowerCase();
+  return /(?:^|[._-])handler(?:[._-]|\.|$)/.test(basename);
+}
+
+function routeAdapterTerms(path: string): string[] {
+  const match = path.toLowerCase().match(/(?:^|\/)app\/api\/(.+)\/route\.[cm]?[jt]sx?$/);
+  if (!match) return [];
+  return uniqueStrings(match[1].split(/[^a-z0-9]+/).map(normalizeRouteTerm).filter((term) => term.length >= 3 && !routeTermNoise.has(term)));
+}
+
+function hasAllTerms(path: string, terms: string[]): boolean {
+  const candidateTerms = pathTerms(path);
+  return terms.every((term) => candidateTerms.has(term) || candidateTerms.has(singular(term)));
+}
+
+function pathTerms(path: string): Set<string> {
+  return new Set(path.toLowerCase().split(/[^a-z0-9]+/).map(normalizeRouteTerm).filter((term) => term.length >= 3));
+}
+
+function normalizeRouteTerm(term: string): string {
+  return singular(term.replace(/^\[+|\]+$/g, ""));
+}
+
+function singular(term: string): string {
+  return term.endsWith("s") && term.length > 4 ? term.slice(0, -1) : term;
+}
+
+function isCodePath(path: string): boolean {
+  return /\.[cm]?[jt]sx?$/i.test(path);
+}
+
+const routeTermNoise = new Set(["app", "api", "route", "handler", "src", "web", "lib", "server"]);
 
 function readIndexedSource(db: ReturnType<typeof openRepoDb>, path: string): { path: string; language: string; text: string } | undefined {
   const rows = db.prepare(`
@@ -246,6 +329,10 @@ function localityScore(base: string, path: string): number {
   const sameDir = baseDir.length === pathDir.length && shared === baseDir.length;
   const depthPenalty = Math.abs(baseDir.length - pathDir.length);
   return shared * 10 + (sameDir ? 5 : 0) - depthPenalty;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function dedupeReasons(reasons: CodeMapContextReason[]): CodeMapContextReason[] {

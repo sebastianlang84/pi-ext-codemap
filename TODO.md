@@ -24,7 +24,8 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Regel: erst Diagnose/öffentlicher Regressionstest, dann maximal ein Hebel; keine Query-/Threshold-Änderung als Ersatz für Systemverbesserung.
 
 2. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
-   - Kandidaten: Route↔Handler, UI↔API, Provider/Hook↔Consumer, Config-Key↔Nutzung; Source↔Test nur wieder anfassen, wenn ein neuer Eval-Miss nicht durch Entry/Search-Ranking verursacht ist.
+   - Erledigt: Route↔Handler ist als enge Next.js-Route-Adapter-zu-`*handler*`-Quelle plus Handler-Test-Fixture umgesetzt.
+   - Nächste Kandidaten: UI↔API, Provider/Hook↔Consumer, Config-Key↔Nutzung; Source↔Test nur wieder anfassen, wenn ein neuer Eval-Miss nicht durch Entry/Search-Ranking verursacht ist.
    - Regel: pro Konvention ein Fixture/Real-Repo-Case, eigene Metrik, keine breite Heuristik ohne messbaren Gewinn.
 
 ## Parked / später
