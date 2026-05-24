@@ -1,15 +1,13 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join, relative, resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { openRepoDb } from "../src/core/db.ts";
 import { indexRepo } from "../src/core/indexer.ts";
 import { getRepoInfo } from "../src/core/repo.ts";
 import { searchCodeMap } from "../src/core/search.ts";
-import { astGrepSpecsForLanguage } from "../src/core/structural-symbols.ts";
 import {
   evaluateSearchQualityGate,
   scoreSearchQualityCases,
@@ -26,9 +24,15 @@ interface GroundTruthHit {
   kind: string;
 }
 
+interface AstGrepGroundTruthSpec {
+  language: "typescript" | "javascript" | "python";
+  kind: string;
+  pattern: string;
+  globs: string[];
+}
+
 interface RepoReport {
   root: string;
-  experimentalStructuralSymbols: boolean;
   indexed: ReturnType<typeof indexRepo>;
   indexMetrics: IndexMetrics;
   astGrepAvailable: boolean;
@@ -46,36 +50,12 @@ interface IndexMetrics {
   duplicateSymbolGroups: number;
 }
 
-interface ComparisonReport {
-  root: string;
-  baseline: RepoReport;
-  experimental: RepoReport;
-  delta: {
-    indexMetrics: Record<"durationMs" | "dbBytes" | "symbols" | "duplicateSymbolGroups", number>;
-    structural: MetricsDelta;
-    natural: MetricsDelta;
-  };
-}
-
-interface MetricsDelta {
-  top1Accuracy: number;
-  recallAt5: number;
-  expectedCoverageAt5: number;
-  mrrAt5: number;
-  p95LatencyMs: number;
-  misses: number;
-  partialMisses: number;
-  excludedHits: number;
-}
-
 interface ParsedArgs {
   roots: string[];
   thresholds: SearchQualityThresholds;
   gateEnabled: boolean;
   fixtureRepos: boolean;
   localRepos: boolean;
-  experimentalStructuralSymbols: boolean;
-  compareAstGrepSymbols: boolean;
 }
 
 type SearchCase = SearchQualityCase;
@@ -90,6 +70,21 @@ const fixtureRoots = [
   fileURLToPath(new URL("../test/fixtures/search-quality/agent-nav", import.meta.url)),
 ];
 const ignoredStructuralNames = new Set(["main", "run"]);
+const astGrepGroundTruthSpecs: AstGrepGroundTruthSpec[] = [
+  { language: "typescript", kind: "function", pattern: "function $NAME($$$) { $$$ }", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "class", pattern: "class $NAME { $$$ }", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME = ($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME = async ($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME: $$$ = ($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME: $$$ = async ($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME = <$T>($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "javascript", kind: "function", pattern: "function $NAME($$$) { $$$ }", globs: ["*.js", "*.jsx", "*.mjs", "*.cjs"] },
+  { language: "javascript", kind: "class", pattern: "class $NAME { $$$ }", globs: ["*.js", "*.jsx", "*.mjs", "*.cjs"] },
+  { language: "javascript", kind: "const-arrow", pattern: "const $NAME = ($$$) => $$$", globs: ["*.js", "*.jsx", "*.mjs", "*.cjs"] },
+  { language: "javascript", kind: "const-arrow", pattern: "const $NAME = async ($$$) => $$$", globs: ["*.js", "*.jsx", "*.mjs", "*.cjs"] },
+  { language: "python", kind: "function", pattern: "def $NAME($$$): $$$", globs: ["*.py"] },
+  { language: "python", kind: "class", pattern: "class $NAME: $$$", globs: ["*.py"] },
+];
 
 const parsed = parseArgs(process.argv.slice(2));
 const roots = resolveBenchmarkRoots(parsed);
@@ -99,18 +94,10 @@ if (roots.length === 0) {
 }
 
 const astGrepAvailable = hasAstGrep();
-if (parsed.compareAstGrepSymbols) {
-  const comparisons = roots.map((rootArg) => compareRepo(resolve(rootArg), astGrepAvailable));
-  const gate = evaluateReports(comparisons.flatMap((comparison) => [comparison.baseline, comparison.experimental]), parsed.thresholds);
-  console.log(JSON.stringify({ generatedAt: new Date().toISOString(), compareAstGrepSymbols: true, thresholds: parsed.thresholds, comparisons, gate }, null, 2));
-  if (parsed.gateEnabled && !gate.passed) process.exitCode = 1;
-} else {
-  const useStructuralSymbols = parsed.experimentalStructuralSymbols && astGrepAvailable;
-  const reports = roots.map((rootArg) => reportForRoot(resolve(rootArg), { astGrepAvailable, structuralSymbols: useStructuralSymbols }));
-  const gate = evaluateReports(reports, parsed.thresholds);
-  console.log(JSON.stringify({ generatedAt: new Date().toISOString(), experimentalStructuralSymbols: useStructuralSymbols, thresholds: parsed.thresholds, reports, gate }, null, 2));
-  if (parsed.gateEnabled && !gate.passed) process.exitCode = 1;
-}
+const reports = roots.map((rootArg) => reportForRoot(resolve(rootArg), { astGrepAvailable }));
+const gate = evaluateReports(reports, parsed.thresholds);
+console.log(JSON.stringify({ generatedAt: new Date().toISOString(), thresholds: parsed.thresholds, reports, gate }, null, 2));
+if (parsed.gateEnabled && !gate.passed) process.exitCode = 1;
 
 function parseArgs(args: string[]): ParsedArgs {
   const roots: string[] = [];
@@ -118,8 +105,6 @@ function parseArgs(args: string[]): ParsedArgs {
   let gateEnabled = false;
   let fixtureRepos = false;
   let localRepos = false;
-  let experimentalStructuralSymbols = false;
-  let compareAstGrepSymbols = false;
   const applyDefaultGate = () => {
     thresholds.minTop1Accuracy ??= 0.6;
     thresholds.minRecallAt5 ??= 1;
@@ -140,10 +125,6 @@ function parseArgs(args: string[]): ParsedArgs {
       fixtureRepos = true;
     } else if (arg === "--local-repos") {
       localRepos = true;
-    } else if (arg === "--experimental-ast-grep-symbols") {
-      experimentalStructuralSymbols = true;
-    } else if (arg === "--compare-ast-grep-symbols") {
-      compareAstGrepSymbols = true;
     } else if (name === "--min-top1") {
       thresholds.minTop1Accuracy = parseRateArg(name, value);
       thresholds.requireCases ??= true;
@@ -184,66 +165,26 @@ function parseArgs(args: string[]): ParsedArgs {
     }
   }
   if (fixtureRepos && localRepos) throw new Error("Use either --fixtures or --local-repos, not both");
-  return { roots, thresholds, gateEnabled, fixtureRepos, localRepos, experimentalStructuralSymbols, compareAstGrepSymbols };
+  return { roots, thresholds, gateEnabled, fixtureRepos, localRepos };
 }
 
-function compareRepo(root: string, astGrepAvailable: boolean): ComparisonReport {
-  const baselineStateDir = mkdtempSync(join(tmpdir(), "pi-codemap-ast-baseline-"));
-  const experimentalStateDir = mkdtempSync(join(tmpdir(), "pi-codemap-ast-experimental-"));
-  try {
-    const baseline = reportForRoot(root, { astGrepAvailable, structuralSymbols: false, stateDir: baselineStateDir });
-    const experimental = reportForRoot(root, { astGrepAvailable, structuralSymbols: astGrepAvailable, stateDir: experimentalStateDir });
-    return { root, baseline, experimental, delta: compareReports(baseline, experimental) };
-  } finally {
-    rmSync(baselineStateDir, { recursive: true, force: true });
-    rmSync(experimentalStateDir, { recursive: true, force: true });
-  }
-}
-
-function reportForRoot(root: string, options: { astGrepAvailable: boolean; structuralSymbols: boolean; stateDir?: string }): RepoReport {
-  const info = getRepoInfo(root, { stateDir: options.stateDir });
+function reportForRoot(root: string, options: { astGrepAvailable: boolean }): RepoReport {
+  const info = getRepoInfo(root);
   const pathPrefix = relative(info.root, root).split("\\").join("/");
   const start = performance.now();
-  const indexed = indexRepo({ cwd: root, approve: true, pathPrefix, experimentalStructuralSymbols: options.structuralSymbols, stateDir: options.stateDir });
+  const indexed = indexRepo({ cwd: root, approve: true, pathPrefix });
   const indexMetrics = readIndexMetrics(indexed.dbPath, performance.now() - start, pathPrefix);
   const symbols = options.astGrepAvailable ? astGrepSymbols(root, indexed.root).slice(0, 50) : [];
   const structuralCases = groupedSymbolCases(symbols);
   const naturalCases = naturalCasesFor(root, indexed.root);
   return {
     root,
-    experimentalStructuralSymbols: options.structuralSymbols,
     indexed,
     indexMetrics,
     astGrepAvailable: options.astGrepAvailable,
     astGrepSymbols: symbols.length,
-    structural: scoreCases(root, structuralCases, pathPrefix, options.stateDir),
-    natural: scoreCases(root, naturalCases, pathPrefix, options.stateDir),
-  };
-}
-
-function compareReports(baseline: RepoReport, experimental: RepoReport): ComparisonReport["delta"] {
-  return {
-    indexMetrics: {
-      durationMs: roundDelta(experimental.indexMetrics.durationMs - baseline.indexMetrics.durationMs),
-      dbBytes: experimental.indexMetrics.dbBytes - baseline.indexMetrics.dbBytes,
-      symbols: experimental.indexMetrics.symbols - baseline.indexMetrics.symbols,
-      duplicateSymbolGroups: experimental.indexMetrics.duplicateSymbolGroups - baseline.indexMetrics.duplicateSymbolGroups,
-    },
-    structural: compareMetrics(baseline.structural, experimental.structural),
-    natural: compareMetrics(baseline.natural, experimental.natural),
-  };
-}
-
-function compareMetrics(baseline: Metrics, experimental: Metrics): MetricsDelta {
-  return {
-    top1Accuracy: roundDelta(experimental.top1Accuracy - baseline.top1Accuracy),
-    recallAt5: roundDelta(experimental.recallAt5 - baseline.recallAt5),
-    expectedCoverageAt5: roundDelta(experimental.expectedCoverageAt5 - baseline.expectedCoverageAt5),
-    mrrAt5: roundDelta(experimental.mrrAt5 - baseline.mrrAt5),
-    p95LatencyMs: roundDelta(experimental.p95LatencyMs - baseline.p95LatencyMs),
-    misses: experimental.misses.length - baseline.misses.length,
-    partialMisses: experimental.partialMisses.length - baseline.partialMisses.length,
-    excludedHits: experimental.excludedHits.length - baseline.excludedHits.length,
+    structural: scoreCases(root, structuralCases, pathPrefix),
+    natural: scoreCases(root, naturalCases, pathPrefix),
   };
 }
 
@@ -333,13 +274,8 @@ function hasAstGrep(): boolean {
 }
 
 function astGrepSymbols(searchRoot: string, indexRoot: string): GroundTruthHit[] {
-  const specs = [
-    ...astGrepSpecsForLanguage("typescript").map((spec) => ({ ...spec, globs: ["*.ts", "*.tsx"] })),
-    ...astGrepSpecsForLanguage("javascript").map((spec) => ({ ...spec, globs: ["*.js", "*.jsx", "*.mjs", "*.cjs"] })),
-    ...astGrepSpecsForLanguage("python").map((spec) => ({ ...spec, globs: ["*.py"] })),
-  ];
   const hits: GroundTruthHit[] = [];
-  for (const spec of specs) {
+  for (const spec of astGrepGroundTruthSpecs) {
     try {
       const args = ["run", "--pattern", spec.pattern, "--lang", spec.language, "--json=compact", ...spec.globs.flatMap((glob) => ["--globs", glob]), searchRoot];
       const raw = execFileSync("ast-grep", args, { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 }).trim();

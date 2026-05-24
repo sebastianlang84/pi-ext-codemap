@@ -13,8 +13,6 @@ after(() => rmSync(storageHome, { recursive: true, force: true }));
 const { indexRepo } = await import("../src/core/indexer.ts");
 const { searchCodeMap } = await import("../src/core/search.ts");
 const { evaluateSearchQualityGate, scoreSearchQualityCases } = await import("../src/core/search-quality-metrics.ts");
-const { extractSymbols } = await import("../src/core/symbols.ts");
-const { astGrepSpecsForLanguage } = await import("../src/core/structural-symbols.ts");
 
 interface GroundTruthHit {
   name: string;
@@ -23,10 +21,29 @@ interface GroundTruthHit {
   kind: string;
 }
 
+interface AstGrepGroundTruthSpec {
+  language: "typescript" | "python";
+  kind: string;
+  pattern: string;
+  globs: string[];
+}
+
 interface QueryCase {
   query: string;
   expectedPath: string;
 }
+
+const astGrepGroundTruthSpecs: AstGrepGroundTruthSpec[] = [
+  { language: "typescript", kind: "function", pattern: "function $NAME($$$) { $$$ }", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "class", pattern: "class $NAME { $$$ }", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME = ($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME = async ($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME: $$$ = ($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME: $$$ = async ($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "typescript", kind: "const-arrow", pattern: "const $NAME = <$T>($$$) => $$$", globs: ["*.ts", "*.tsx"] },
+  { language: "python", kind: "function", pattern: "def $NAME($$$): $$$", globs: ["*.py"] },
+  { language: "python", kind: "class", pattern: "class $NAME: $$$", globs: ["*.py"] },
+];
 
 function astGrepAvailable(): boolean {
   try {
@@ -104,12 +121,8 @@ The scanner explains skipped secret-like files and generated directories.
 }
 
 function astGrepSymbols(root: string): GroundTruthHit[] {
-  const specs = [
-    ...astGrepSpecsForLanguage("typescript").map((spec) => ({ ...spec, globs: ["*.ts", "*.tsx"] })),
-    ...astGrepSpecsForLanguage("python").map((spec) => ({ ...spec, globs: ["*.py"] })),
-  ];
   const hits: GroundTruthHit[] = [];
-  for (const spec of specs) {
+  for (const spec of astGrepGroundTruthSpecs) {
     try {
       const args = ["run", "--pattern", spec.pattern, "--lang", spec.language, "--json=compact", ...spec.globs.flatMap((glob) => ["--globs", glob]), root];
       const raw = execFileSync("ast-grep", args, { encoding: "utf8" }).trim();
@@ -230,32 +243,6 @@ test("bench search-quality fixture gate uses checked-in fixtures", () => {
   assert.deepEqual(report.reports[0]?.natural.excludedHits, []);
 });
 
-test("bench search-quality can compare ast-grep prototype with isolated state", () => {
-  const output = execFileSync(process.execPath, ["--experimental-strip-types", "scripts/bench-search-quality.ts", "--fixtures", "--compare-ast-grep-symbols"], { encoding: "utf8" });
-  const report = JSON.parse(output) as {
-    compareAstGrepSymbols: boolean;
-    comparisons: Array<{
-      baseline: { experimentalStructuralSymbols: boolean; indexed: { dbPath: string }; indexMetrics: { durationMs: number; symbols: number; duplicateSymbolGroups: number } };
-      experimental: { experimentalStructuralSymbols: boolean; indexed: { dbPath: string }; indexMetrics: { durationMs: number; symbols: number; duplicateSymbolGroups: number } };
-      delta: { indexMetrics: { symbols: number }; structural: { mrrAt5: number; excludedHits: number }; natural: { recallAt5: number; excludedHits: number } };
-    }>;
-  };
-
-  assert.equal(report.compareAstGrepSymbols, true);
-  assert.equal(report.comparisons.length, 1);
-  const comparison = report.comparisons[0];
-  assert.ok(comparison);
-  assert.equal(comparison.baseline.experimentalStructuralSymbols, false);
-  assert.notEqual(comparison.baseline.indexed.dbPath, comparison.experimental.indexed.dbPath);
-  assert.ok(comparison.baseline.indexMetrics.durationMs >= 0);
-  assert.ok(comparison.experimental.indexMetrics.symbols >= comparison.baseline.indexMetrics.symbols);
-  assert.equal(comparison.baseline.indexMetrics.duplicateSymbolGroups, 0);
-  assert.equal(comparison.experimental.indexMetrics.duplicateSymbolGroups, 0);
-  assert.equal(typeof comparison.delta.structural.mrrAt5, "number");
-  assert.equal(comparison.delta.structural.excludedHits, 0);
-  assert.equal(comparison.delta.natural.excludedHits, 0);
-});
-
 test("bench search-quality gate includes generic repo-shape regression cases", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-bench-gate-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -277,29 +264,6 @@ test("bench search-quality gate includes generic repo-shape regression cases", (
   assert.equal(report.gate.passed, true);
   assert.ok(report.reports[0]?.natural.cases >= 4, JSON.stringify(report.reports[0]?.natural));
   assert.deepEqual(report.reports[0]?.natural.excludedHits, []);
-});
-
-test("experimental ast-grep symbol extraction supplements cheap regex symbols", { skip: !astGrepAvailable() && "ast-grep CLI is not installed" }, (t) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-codemap-ast-symbols-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
-  mkdirSync(join(root, "src"), { recursive: true });
-  const source = `
-export const handleRequest: RouteHandler = async (request) => {
-  return request;
-};
-
-export const genericIdentity = <T>(value: T) => value;
-`;
-  writeFileSync(join(root, "src", "route.ts"), source);
-
-  assert.equal(extractSymbols(source, "typescript").some((symbol) => symbol.name === "handleRequest"), false);
-  assert.equal(extractSymbols(source, "typescript", { structural: true }).some((symbol) => symbol.name === "handleRequest"), true);
-
-  indexRepo({ cwd: root, approve: true, experimentalStructuralSymbols: true });
-  const [top] = searchCodeMap({ cwd: root, query: "handleRequest", limit: 5 });
-  assert.equal(top?.path, "src/route.ts");
-  assert.equal(top?.kind, "const-arrow");
 });
 
 test("CodeMap search quality is quantifiable against ast-grep structural ground truth", { skip: !astGrepAvailable() && "ast-grep CLI is not installed" }, (t) => {

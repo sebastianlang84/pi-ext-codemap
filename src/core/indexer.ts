@@ -6,7 +6,7 @@ import { getRepoInfo, approveRepo, type StateOptions } from "./repo.ts";
 import { normalizePathPrefix, scanRepo } from "./scanner.ts";
 import type { IndexStats } from "./types.ts";
 
-export function indexRepo(options: { cwd?: string; approve?: boolean; pathPrefix?: string; experimentalStructuralSymbols?: boolean } & StateOptions = {}): IndexStats & { dbPath: string; root: string; pathPrefix: string } {
+export function indexRepo(options: { cwd?: string; approve?: boolean; pathPrefix?: string } & StateOptions = {}): IndexStats & { dbPath: string; root: string; pathPrefix: string } {
   const stateOptions = { stateDir: options.stateDir };
   const info = options.approve ? approveRepo(options.cwd, "codemap_index", stateOptions) : getRepoInfo(options.cwd, stateOptions);
   if (!info.approved) throw new Error("Repository is not approved. Run codemap_index with approveRepo: true first.");
@@ -14,7 +14,7 @@ export function indexRepo(options: { cwd?: string; approve?: boolean; pathPrefix
   const db = openRepoDb(info.dbPath);
   const scan = scanRepo(info.root, { pathPrefix });
   try {
-    const update = applyIndexUpdate({ db, files: scan.files, pathPrefix, indexedHead: readGitHead(info.root), structuralSymbols: options.experimentalStructuralSymbols });
+    const update = applyIndexUpdate({ db, files: scan.files, pathPrefix, indexedHead: readGitHead(info.root) });
     return { scanned: scan.files.length, indexed: update.indexed, skipped: scan.skipped, skippedReasons: scan.skippedReasons, removed: update.removed, warnings: scan.warnings, dbPath: info.dbPath, root: info.root, pathPrefix };
   } catch (error) {
     try { db.exec("rollback"); } catch { /* already closed or not in transaction */ }

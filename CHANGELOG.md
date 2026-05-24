@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the internal experimental `ast-grep`-supplemented symbol indexing path and comparison benchmark after evals showed no retrieval-quality gain, a local structural Top-1/MRR regression, and measurable index-time cost; optional `ast-grep` remains only benchmark ground truth.
+
 ## 0.5.4 - 2026-05-24
 
 - Add an internal opt-in `ast-grep`-supplemented symbol indexing prototype plus search-quality benchmark flags, including an isolated default-vs-experimental comparison report, keeping the default indexer and public Pi tool schemas unchanged.

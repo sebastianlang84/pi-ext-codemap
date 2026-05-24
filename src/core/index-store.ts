@@ -5,7 +5,6 @@ import { extractSymbols } from "./symbols.ts";
 import type { ScannedFile } from "./scanner.ts";
 
 const INDEX_VERSION = "7";
-const STRUCTURAL_SYMBOLS_INDEX_VERSION = `${INDEX_VERSION}:ast-grep-symbols-v1`;
 
 export interface IndexStoreResult {
   indexed: number;
@@ -17,14 +16,12 @@ export function applyIndexUpdate(options: {
   files: ScannedFile[];
   pathPrefix: string;
   indexedHead: string | null;
-  structuralSymbols?: boolean;
 }): IndexStoreResult {
-  const { db, files, pathPrefix, indexedHead, structuralSymbols = false } = options;
+  const { db, files, pathPrefix, indexedHead } = options;
   const indexVersionKey = pathPrefix ? `index_version:${pathPrefix}` : "index_version";
   const lastIndexedAtKey = pathPrefix ? `last_indexed_at:${pathPrefix}` : "last_indexed_at";
   const indexedHeadKey = pathPrefix ? `indexed_head:${pathPrefix}` : "indexed_head";
-  const expectedIndexVersion = structuralSymbols ? STRUCTURAL_SYMBOLS_INDEX_VERSION : INDEX_VERSION;
-  const forceReindex = shouldForceReindex(db, indexVersionKey, expectedIndexVersion);
+  const forceReindex = shouldForceReindex(db, indexVersionKey, INDEX_VERSION);
   const forceGraphRebuild = forceReindex || isGraphStale(db);
   const seen = new Set<string>();
   let indexed = 0;
@@ -32,11 +29,11 @@ export function applyIndexUpdate(options: {
   db.exec("begin immediate");
   for (const file of files) {
     seen.add(file.relPath);
-    if (upsertIndexedFile(db, file, forceReindex, structuralSymbols)) indexed++;
+    if (upsertIndexedFile(db, file, forceReindex)) indexed++;
   }
   const removed = removeDeletedFiles(db, seen, pathPrefix);
   if (indexed > 0 || removed > 0 || forceGraphRebuild) rebuildFileReferenceGraph(db);
-  writeIndexMetadata(db, indexVersionKey, lastIndexedAtKey, indexedHeadKey, indexedHead, expectedIndexVersion);
+  writeIndexMetadata(db, indexVersionKey, lastIndexedAtKey, indexedHeadKey, indexedHead, INDEX_VERSION);
   db.exec("commit");
   return { indexed, removed };
 }
@@ -52,13 +49,13 @@ function writeIndexMetadata(db: ReturnType<typeof openRepoDb>, indexVersionKey: 
   db.prepare("insert or replace into meta(key, value) values (?, ?)").run(indexVersionKey, indexVersion);
 }
 
-function upsertIndexedFile(db: ReturnType<typeof openRepoDb>, file: ScannedFile, forceReindex: boolean, structuralSymbols: boolean): boolean {
+function upsertIndexedFile(db: ReturnType<typeof openRepoDb>, file: ScannedFile, forceReindex: boolean): boolean {
   const existing = db.prepare("select id, hash, mtime_ms from files where path = ?").get(file.relPath) as { id: number; hash: string; mtime_ms: number } | undefined;
   if (!forceReindex && existing && existing.hash === file.hash && Math.round(existing.mtime_ms) === Math.round(file.mtimeMs)) return false;
 
   const fileId = writeFileRow(db, file, existing?.id);
   replaceChunks(db, fileId, file);
-  replaceSymbols(db, fileId, file, structuralSymbols);
+  replaceSymbols(db, fileId, file);
   return true;
 }
 
@@ -87,8 +84,8 @@ function replaceChunks(db: ReturnType<typeof openRepoDb>, fileId: number, file: 
   }
 }
 
-function replaceSymbols(db: ReturnType<typeof openRepoDb>, fileId: number, file: ScannedFile, structuralSymbols: boolean): void {
-  for (const symbol of extractSymbols(file.text, file.language, { structural: structuralSymbols })) {
+function replaceSymbols(db: ReturnType<typeof openRepoDb>, fileId: number, file: ScannedFile): void {
+  for (const symbol of extractSymbols(file.text, file.language)) {
     const result = db.prepare("insert into symbols(file_id, name, kind, start_line, end_line, signature) values (?, ?, ?, ?, ?, ?)")
       .run(fileId, symbol.name, symbol.kind, symbol.startLine, symbol.endLine ?? null, symbol.signature ?? null);
     db.prepare("insert into symbols_fts(rowid, path, name, kind, signature) values (?, ?, ?, ?, ?)")

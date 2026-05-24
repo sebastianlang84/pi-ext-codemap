@@ -50,7 +50,7 @@ Near-term improvement priorities:
 
 1. **Make the current lightweight workflow honest and strong**: keep search/context evals, preserve visible search hits in scripted read plans, and expand the natural-language holdout before claiming broad bug-report navigation.
 2. **Add relationships only as measured verticals**: route↔handler, UI↔API, provider/hook↔consumer, and config-key↔usage should each get a fixture or real-repo case before any broad heuristic ships.
-3. **Improve structural extraction pragmatically**: evaluate optional `ast-grep`/Tree-sitter-style extraction for imports, exports, route declarations, and test-subject detection before adding heavier graph semantics.
+3. **Improve structural extraction pragmatically**: revisit optional `ast-grep`/Tree-sitter-style extraction for imports, exports, route declarations, and test-subject detection only with a concrete eval miss; the first symbol-indexing prototype was removed after it failed the keep rule.
 4. **Keep semantic/vector retrieval optional**: embeddings may help vague vocabulary mismatch, but exact path/symbol, lexical FTS, and deterministic relationships must remain the default and fallback.
 5. **Expose only proven surfaces**: prefer internal eval utilities and docs over new prompt-facing tools/parameters until a measured miss requires an API change.
 
@@ -75,7 +75,7 @@ Hard design rule for future semantic search: **exact path/symbol > lexical FTS >
 | Ranking diagnostics | Internal ranking traces for path/filename/symbol/FTS/token coverage/context bonuses/noise penalties | Needed before heavier ranking changes so quality regressions are debuggable; keep public `SearchResult` compact. |
 | Embeddings/vector adapters | Optional local `EmbeddingProvider`, `VectorStore`, and `HybridRanker`; evaluate LanceDB first for embedded local storage, Qdrant/FastEmbed only if a stronger vector stack is intentionally needed | No cloud requirement; FTS must stay useful without embeddings. Treat model runtimes and vector stores as opt-in. |
 | Ranking | Hybrid lexical/semantic ranking, possibly Reciprocal Rank Fusion | Keep deterministic lexical ranking as the fallback; exact path/symbol matches must not be displaced by semantic similarity. |
-| ast-grep and symbols | Optional query-time structural search plus stronger symbol extraction | Must degrade cleanly when `ast-grep` is unavailable. |
+| ast-grep and symbols | Optional query-time structural search or stronger structural extraction, only if a new eval miss justifies it | A prior opt-in symbol-indexing prototype was removed after no quality gain and measurable index cost; any future use must degrade cleanly when `ast-grep` is unavailable. |
 | Graph and relationships | Small SQLite mini-graph, first for exact file import/include relationships in context | See [`relationship graph plan`](../developer/relationship-graph-plan.md). No external graph server. Keep V1.5 to file nodes plus exact `imports`/`includes`; promote broader relationships only when they improve read-first context enough to justify maintenance. |
 | Related context | Better test/dependency/config hints for arbitrary repos | Direct local imports and reverse-import callers are implemented for read-first context; remaining work should focus on measured zero-config gaps such as stronger test/callsite/config relationships and context expansion reasons. Treat Markdown links as opportunistic, not central. |
 | CLI adapter | Add a thin `src/cli/` adapter over `src/core/` | Keep CLI output/argv parsing separate from product logic; see the architecture boundary in [`../developer/architecture.md`](../developer/architecture.md#architecture-boundary). |
@@ -86,7 +86,7 @@ Hard design rule for future semantic search: **exact path/symbol > lexical FTS >
 
 - Which optional local embedding adapter should be tried first, for example FastEmbed/ONNX or another lightweight provider?
 - Which vector backend, if any, is worth supporting first: `sqlite-vec`, Vec1, LanceDB, or an external vector backend?
-- How far should cheap regex symbol extraction go before using optional `ast-grep`?
+- Which concrete eval miss, if any, would justify revisiting optional `ast-grep` after the removed symbol-indexing prototype showed no net gain?
 - How much query-time structural search should come from `ast-grep`, and what should remain lexical/FTS-only?
 - After direct/reverse import hints, which zero-config test/callsite/config relationships are useful enough for V1.5/V2?
 - When should a CLI adapter become worth adding, and which output modes besides JSON are needed?
