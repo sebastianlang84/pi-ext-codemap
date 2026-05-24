@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.5 - 2026-05-24
+
 - Remove the internal experimental `ast-grep`-supplemented symbol indexing path and comparison benchmark after evals showed no retrieval-quality gain, a local structural Top-1/MRR regression, and measurable index-time cost; optional `ast-grep` remains only benchmark ground truth.
 
 ## 0.5.4 - 2026-05-24
