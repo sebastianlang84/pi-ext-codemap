@@ -225,6 +225,22 @@ const defaultSuites: RealRepoSuite[] = [
         requiredContext: ["apps/web/src/lib/__tests__/series-workbench-chart.test.ts", "apps/web/src/components/series-workbench.tsx"],
         forbidden: ["apps/web/package-lock.json", "package-lock.json"],
       },
+      {
+        name: "NL holdout macro signal threshold boundaries",
+        cohort: "natural_holdout",
+        query: "market regime cards show neutral tone at threshold values for VIX oil CPI payrolls yield curve and credit",
+        entry: "apps/web/src/lib/macro-signal-rules.ts",
+        requiredContext: ["apps/web/src/lib/macro-derivations.ts", "apps/web/src/lib/__tests__/macro-derivations.test.ts"],
+        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
+      },
+      {
+        name: "NL holdout catalog endpoint duplicate provider ids",
+        cohort: "natural_holdout",
+        query: "catalog endpoint returns duplicate macro provider ids and dashboard dropdown shows repeated series",
+        entry: "apps/web/src/app/api/catalog/route.ts",
+        requiredContext: ["apps/web/src/lib/series-catalog.ts", "apps/web/src/lib/__tests__/series-catalog.test.ts"],
+        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
+      },
     ],
   },
   {
@@ -290,6 +306,14 @@ const defaultSuites: RealRepoSuite[] = [
         requiredContext: ["test/pi-extension/retrieval.test.ts", "docs/adr/005-simplified-agent-facing-scopes.md", "docs/adr/006-normal-and-advanced-tool-surface.md"],
         forbidden: ["package-lock.json", "docs/archive/plans/tool-surface-simplification.md"],
       },
+      {
+        name: "NL holdout legacy project audit preview",
+        cohort: "natural_holdout",
+        query: "memory audit should show read only legacy project migration preview without rewriting archived or repo scoped records",
+        entry: "src/pi-extension/audit.ts",
+        requiredContext: ["test/pi-extension/audit.test.ts", "docs/adr/005-simplified-agent-facing-scopes.md", "docs/adr/007-memory-model-minimisation.md"],
+        forbidden: ["package-lock.json", "docs/archive/plans/memory-scope-simplification.md"],
+      },
     ],
   },
   {
@@ -317,6 +341,14 @@ const defaultSuites: RealRepoSuite[] = [
         requiredContext: ["docs/benchmarks/reviewer-context-scout-fixtures.json", "tests/reviewer-context-scout-benchmark.test.mjs"],
         forbidden: ["docs/plans/fanout-reduce.md"],
       },
+      {
+        name: "NL holdout repo agent mutation warning",
+        cohort: "natural_holdout",
+        query: "repo local subagent approval warning should list mutation capable bash and edit tools without trusting untrusted frontmatter text",
+        entry: "src/agents.ts",
+        requiredContext: ["tests/agents.test.mjs", "src/request.ts"],
+        forbidden: ["package-lock.json", "docs/plans/fanout-reduce.md"],
+      },
     ],
   },
   {
@@ -336,6 +368,14 @@ const defaultSuites: RealRepoSuite[] = [
         query: "ast grep binary path should reject ambiguous sg shadow utils command and show install guidance",
         entry: "src/ast-grep/binary-path.ts",
         requiredContext: ["src/ast-grep/cli.ts", "test/binary-path.test.ts", "README.md"],
+        forbidden: ["package-lock.json", "docs/archive/plans/slim-fork-plan.md"],
+      },
+      {
+        name: "NL holdout truncated ast-grep output banner",
+        cohort: "natural_holdout",
+        query: "ast grep search should salvage truncated JSON output and explain output exceeded the one megabyte limit",
+        entry: "src/ast-grep/json-output.ts",
+        requiredContext: ["src/ast-grep/result-formatter.ts", "test/sg-compact-json-output.test.ts", "test/result-formatter.test.ts"],
         forbidden: ["package-lock.json", "docs/archive/plans/slim-fork-plan.md"],
       },
     ],
@@ -360,7 +400,7 @@ function parseArgs(args: string[]): ParsedArgs {
   let limit = 5;
   let maxP95LatencyMs = 500;
   let minTasks = 8;
-  let minNaturalHoldoutTasks = 11;
+  let minNaturalHoldoutTasks = 16;
   let minNaturalHoldoutExpectedRecall = 0.55;
   let minNaturalHoldoutContextRecall = 0.55;
   let minSuccessDeltaVsLexical = 0.2;

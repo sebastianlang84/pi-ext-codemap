@@ -17,6 +17,7 @@ export function collectSearchCandidates(db: ReturnType<typeof openRepoDb>, reque
   const results: SearchResult[] = [];
   results.push(...pathMatchCandidates(db, request));
   results.push(...basenameTermCandidates(db, request));
+  results.push(...endpointRouteCandidates(db, request));
   results.push(...roleIntentCandidates(db, request));
   for (const ftsQuery of request.plan.ftsQueries) {
     const remaining = Math.max(request.limit * 2 - results.length, request.limit);
@@ -52,6 +53,24 @@ function basenameTermCandidates(db: ReturnType<typeof openRepoDb>, request: Sear
   return rows
     .filter((row) => termSet.has(fileStem(row.path)))
     .map((row) => toResult(row, request.plan, 42));
+}
+
+function endpointRouteCandidates(db: ReturnType<typeof openRepoDb>, request: SearchRetrievalRequest): SearchResult[] {
+  if (!request.plan.coreTerms.includes("endpoint") || !request.plan.codeIntent || request.plan.endpointPathTerms.length === 0) return [];
+  const rows = db.prepare(`
+    select f.path, f.language, s.start_line as startLine, coalesce(s.end_line, s.start_line) as endLine,
+           s.kind, coalesce(s.signature, s.name) as text, 0 as rank, f.size as size, s.name as symbolName
+    from files f
+    join symbols s on s.file_id = f.id
+    where f.path like ? escape '\\'
+      and (lower(f.path) like '%/app/api/%/route.%' or lower(f.path) like 'app/api/%/route.%')
+      and lower(s.name) in ('get', 'post', 'put', 'patch', 'delete')
+    order by length(f.path), f.path
+    limit 100
+  `).all(request.pathFilter) as unknown as SearchRow[];
+  return rows
+    .filter((row) => matchedTermCount(row.path.toLowerCase(), request.plan.endpointPathTerms) > 0)
+    .map((row) => toResult(row, request.plan, 34));
 }
 
 function roleIntentCandidates(db: ReturnType<typeof openRepoDb>, request: SearchRetrievalRequest): SearchResult[] {

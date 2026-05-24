@@ -14,25 +14,40 @@ export function mergeSearchContextReadPlan(searchPaths: string[], contextPaths: 
   const contextEntries = contextPaths.map(toContextEntry).filter((item) => item.path);
   const [firstSearchPath, ...laterSearchPaths] = searchPaths;
   const searchPathSet = new Set(searchPaths);
+  const routeAdapterEntry = isRouteAdapterPath(firstSearchPath ?? "");
   const prioritizedConfigs = contextEntries.filter((item) => isRelatedConfig(item) && !searchPathSet.has(item.path));
   const prioritizedTests = contextEntries.filter((item) => isRelatedTest(item, searchPathSet) && !searchPathSet.has(item.path));
   const hasCompetingDocOrConfig = laterSearchPaths.some(isDocumentationPath) || contextEntries.some((item) => isRelatedDoc(item) || isAnyConfig(item));
-  const prioritizedDirectImports = prioritizedConfigs.length === 0 && prioritizedTests.length === 0 && !hasCompetingDocOrConfig
-    ? contextEntries.filter((item) => isDirectImport(item) && !searchPaths.includes(item.path)).slice(0, 1)
+  const directImportCandidates = contextEntries.filter((item) => isDirectImport(item) && (routeAdapterEntry || !searchPaths.includes(item.path)));
+  const prioritizedDirectImports = routeAdapterEntry
+    ? sortByPathAffinity(directImportCandidates, firstSearchPath ?? "").slice(0, 1)
+    : prioritizedConfigs.length === 0 && prioritizedTests.length === 0 && !hasCompetingDocOrConfig
+      ? directImportCandidates.slice(0, 1)
+      : [];
+  const directImportPathSet = new Set([...searchPaths, ...prioritizedDirectImports.map((item) => item.path)]);
+  const prioritizedDirectImportTests = prioritizedDirectImports.length > 0
+    ? contextEntries.filter((item) => isRelatedTest(item, directImportPathSet) && !searchPathSet.has(item.path) && !prioritizedDirectImports.some((priority) => priority.path === item.path)).slice(0, 1)
     : [];
-  const prioritizedContext = [...prioritizedConfigs, ...prioritizedTests, ...prioritizedDirectImports];
+  const prioritizedContext = [...prioritizedConfigs, ...prioritizedTests, ...prioritizedDirectImports, ...prioritizedDirectImportTests];
   const remainingContext = contextEntries.filter((item) => !prioritizedContext.some((priority) => priority.path === item.path));
   const contextByPath = new Map(contextEntries.map((item) => [item.path, item]));
   const contextBackedSearchPaths = laterSearchPaths.filter((path) => isContextBackedSearchHit(contextByPath.get(path)));
   const remainingSearchPaths = laterSearchPaths.filter((path) => !contextBackedSearchPaths.includes(path));
+  const activeSearchPaths = remainingSearchPaths.filter((path) => !isArchivedDocumentationPath(path));
+  const archivedSearchPaths = remainingSearchPaths.filter(isArchivedDocumentationPath);
   return uniquePaths([
     firstSearchPath,
-    ...prioritizedConfigs.map((item) => item.path),
+    ...(routeAdapterEntry ? prioritizedDirectImports.map((item) => item.path) : []),
+    ...(routeAdapterEntry ? prioritizedDirectImportTests.map((item) => item.path) : []),
+    ...(routeAdapterEntry ? [] : prioritizedConfigs.map((item) => item.path)),
     ...prioritizedTests.map((item) => item.path),
     ...contextBackedSearchPaths,
-    ...prioritizedDirectImports.map((item) => item.path),
-    ...remainingSearchPaths,
+    ...(routeAdapterEntry ? [] : prioritizedDirectImports.map((item) => item.path)),
+    ...(routeAdapterEntry ? [] : prioritizedDirectImportTests.map((item) => item.path)),
+    ...activeSearchPaths,
+    ...(routeAdapterEntry ? prioritizedConfigs.map((item) => item.path) : []),
     ...remainingContext.map((item) => item.path),
+    ...archivedSearchPaths,
   ]).slice(0, cappedLimit);
 }
 
@@ -76,6 +91,31 @@ function isContextBackedSearchHit(item: { path: string; reasons: string[] } | un
 function isDocumentationPath(path: string): boolean {
   return /\.(?:md|mdx|rst|txt)$/i.test(path);
 }
+
+function isRouteAdapterPath(path: string): boolean {
+  return /(?:^|\/)app\/api\/.+\/route\.[cm]?[jt]sx?$/i.test(path);
+}
+
+function isArchivedDocumentationPath(path: string): boolean {
+  return /(?:^|\/)docs\/archive\//i.test(path);
+}
+
+function sortByPathAffinity(items: ContextEntry[], targetPath: string): ContextEntry[] {
+  const targetTerms = pathTerms(targetPath);
+  return [...items].sort((left, right) => pathAffinity(right.path, targetTerms) - pathAffinity(left.path, targetTerms) || left.path.localeCompare(right.path));
+}
+
+function pathAffinity(path: string, targetTerms: Set<string>): number {
+  let score = 0;
+  for (const term of pathTerms(path)) if (targetTerms.has(term)) score++;
+  return score;
+}
+
+function pathTerms(path: string): Set<string> {
+  return new Set(path.toLowerCase().split(/[^a-z0-9]+/).filter((term) => term.length > 2 && !pathTermNoise.has(term)));
+}
+
+const pathTermNoise = new Set(["app", "api", "src", "lib", "route", "test", "tests", "web"]);
 
 function uniquePaths(paths: string[]): string[] {
   const seen = new Set<string>();

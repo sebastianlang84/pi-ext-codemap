@@ -80,8 +80,8 @@ export function scoreSearchRow(row: SearchRow, plan: QueryPlan, boost: number): 
   const routeHandlerSymbol = symbolish
     && /(?:^|\/)route\.[cm]?[jt]sx?$/.test(lowerPath)
     && ["get", "post", "put", "patch", "delete"].includes(symbolName)
-    && plan.terms.some((term) => term.toLowerCase() === symbolName)
-    && plan.codeIntent;
+    && plan.codeIntent
+    && (plan.terms.some((term) => term.toLowerCase() === symbolName) || matchedQueryTokens(lowerPath, plan.endpointPathTerms).length > 0);
   const symbolScore = (symbolish && exactText ? 3 : 0) + (exactSymbol ? 28 : 0) + (exactTermSymbol ? 20 : 0) + (prefixSymbol ? 10 : 0) + (routeHandlerSymbol ? 20 : 0);
   const textCoverageScore = textCoverage * 3;
   const codeIntentBoost = (plan.codeIntent && codeLike ? 2 : 0) + (plan.codeIntent && sourceLike ? 4 : 0);

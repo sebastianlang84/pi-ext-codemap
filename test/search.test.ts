@@ -176,6 +176,34 @@ test("search+context read plan preserves visible search hits within the read bud
   );
 });
 
+test("search+context read plan defers archived docs behind active search and context paths", () => {
+  assert.deepEqual(
+    mergeSearchContextReadPlan(
+      [
+        "src/pi-extension/audit.ts",
+        "test/pi-extension/audit.test.ts",
+        "docs/archive/plans/memory-scope-simplification.md",
+        "src/core/policy.ts",
+        "src/pi-extension/retrieval.ts",
+      ],
+      [
+        { path: "src/pi-extension/audit.ts", reasons: [{ kind: "target" }] },
+        { path: "src/core/index.ts", reasons: [{ kind: "import" }] },
+        { path: "test/pi-extension/audit.test.ts", reasons: [{ kind: "reverse_test" }] },
+        { path: "test/pi-extension/commands.test.ts", reasons: [{ kind: "sibling_test" }] },
+      ],
+      5,
+    ),
+    [
+      "src/pi-extension/audit.ts",
+      "test/pi-extension/audit.test.ts",
+      "src/core/policy.ts",
+      "src/pi-extension/retrieval.ts",
+      "src/core/index.ts",
+    ],
+  );
+});
+
 test("search+context read plan promotes context-related tests ahead of lower search hits", () => {
   assert.deepEqual(
     mergeSearchContextReadPlan(
@@ -1025,6 +1053,73 @@ The newsletter macro endpoint returns stale and unavailable source-decision warn
     "apps/web/src/lib/newsletter-macro-snapshot.ts",
     "apps/web/src/app/api/newsletter/macro/route.ts",
     "apps/web/src/lib/__tests__/newsletter-macro-snapshot.test.ts",
+  ]) {
+    assert.ok(readPlan.includes(expectedPath), JSON.stringify({ searchPaths, readFirst: contextResult.readFirst.map((item) => ({ path: item.path, reasons: item.reasons?.map((reason) => reason.kind) })), readPlan }));
+  }
+});
+
+test("natural catalog endpoint requests keep route adapter, catalog source, and catalog test", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-catalog-endpoint-read-plan-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "apps", "web", "src", "app", "api", "catalog"), { recursive: true });
+  mkdirSync(join(root, "apps", "web", "src", "components"), { recursive: true });
+  mkdirSync(join(root, "apps", "web", "src", "lib", "__tests__"), { recursive: true });
+  mkdirSync(join(root, "apps", "web", "src", "lib", "providers"), { recursive: true });
+
+  writeFileSync(join(root, "apps", "web", "tsconfig.json"), JSON.stringify({ compilerOptions: { baseUrl: "src", paths: { "@/*": ["*"] } } }, null, 2));
+  writeFileSync(join(root, "apps", "web", "src", "app", "api", "catalog", "route.ts"), `
+import { SERIES_CATALOG } from "@/lib/series-catalog";
+
+export async function GET() {
+  return Response.json(SERIES_CATALOG);
+}
+`);
+  writeFileSync(join(root, "apps", "web", "src", "lib", "series-catalog.ts"), `
+export interface SeriesSpec {
+  key: string;
+  label: string;
+  providerId: string;
+  source: "fred" | "yahoo";
+}
+
+export const SERIES_CATALOG: SeriesSpec[] = [
+  { key: "sp500", label: "Macro dashboard dropdown series", providerId: "DUPLICATE", source: "yahoo" },
+  { key: "vix", label: "Macro provider ids duplicate", providerId: "DUPLICATE", source: "yahoo" },
+];
+`);
+  writeFileSync(join(root, "apps", "web", "src", "lib", "__tests__", "series-catalog.test.ts"), `
+import { SERIES_CATALOG } from "../series-catalog";
+
+test("provider ids are unique for dashboard dropdown", () => {
+  expect(new Set(SERIES_CATALOG.map((series) => series.providerId)).size).toBe(SERIES_CATALOG.length);
+});
+`);
+  for (const provider of ["finra", "fred", "yahoo"]) {
+    writeFileSync(join(root, "apps", "web", "src", "lib", "providers", `${provider}.ts`), `
+import type { SeriesSpec } from "@/lib/series-catalog";
+
+export function fetch${provider}(series: SeriesSpec) {
+  return { providerId: series.providerId, macro: true, dashboard: true, dropdown: "series" };
+}
+`);
+  }
+  writeFileSync(join(root, "apps", "web", "src", "components", "dashboard-client.tsx"), `
+export function DashboardClient() {
+  return <select>{["macro", "provider", "dashboard", "dropdown", "series"].map((item) => <option>{item}</option>)}</select>;
+}
+`);
+  indexRepo({ cwd: root, approve: true });
+
+  const query = "catalog endpoint returns duplicate macro provider ids and dashboard dropdown shows repeated series";
+  const searchPaths = searchCodeMap({ cwd: root, query, limit: 5 }).map((result) => result.path);
+  const contextResult = codemapContext({ cwd: root, target: searchPaths[0] ?? query, limit: 5 });
+  const readPlan = mergeSearchContextReadPlan(searchPaths, contextResult.readFirst, 5);
+
+  for (const expectedPath of [
+    "apps/web/src/app/api/catalog/route.ts",
+    "apps/web/src/lib/series-catalog.ts",
+    "apps/web/src/lib/__tests__/series-catalog.test.ts",
   ]) {
     assert.ok(readPlan.includes(expectedPath), JSON.stringify({ searchPaths, readFirst: contextResult.readFirst.map((item) => ({ path: item.path, reasons: item.reasons?.map((reason) => reason.kind) })), readPlan }));
   }

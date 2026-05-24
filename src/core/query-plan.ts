@@ -13,6 +13,7 @@ export interface QueryPlan {
   codeIntent: boolean;
   roleIntents: string[];
   pathTerms: string[];
+  endpointPathTerms: string[];
   ftsQueries: FtsQuery[];
 }
 
@@ -31,6 +32,7 @@ export function planQuery(query: string): QueryPlan {
   const codeIntent = coreTerms.some((term) => codeIntentTerms.has(term));
   const roleIntents = inferRoleIntents(normalized, coreTerms);
   const pathTerms = inferPathTerms(coreTerms);
+  const endpointPathTerms = inferEndpointPathTerms(expandedTerms);
   const quotedPhrases = phrases.map(quoteFtsPhrase);
   const quotedTerms = terms.map(quoteFtsPhrase);
   const quotedExpandedTerms = expandedTerms.map(quoteFtsPhrase);
@@ -49,7 +51,7 @@ export function planQuery(query: string): QueryPlan {
     { query: broadTerms.map(quoteFtsPhrase).join(" OR "), tierBoost: 0 },
   ].filter((entry) => entry.query));
 
-  return { normalized, terms: expandedTerms, coreTerms, phrases, pathLike, pathNeedle, codeIntent, roleIntents, pathTerms, ftsQueries };
+  return { normalized, terms: expandedTerms, coreTerms, phrases, pathLike, pathNeedle, codeIntent, roleIntents, pathTerms, endpointPathTerms, ftsQueries };
 }
 
 const stopWords = new Set([
@@ -85,6 +87,17 @@ function inferRoleIntents(normalized: string, terms: string[]): string[] {
 function inferPathTerms(terms: string[]): string[] {
   return terms.includes("preload") ? ["retrieval"] : [];
 }
+
+function inferEndpointPathTerms(terms: string[]): string[] {
+  const endpointTerms: string[] = [];
+  for (let index = 0; index < terms.length; index++) {
+    if (terms[index] !== "endpoint") continue;
+    endpointTerms.push(...terms.slice(Math.max(0, index - 2), index), ...terms.slice(index + 1, index + 2));
+  }
+  return uniqueStrings(endpointTerms.filter((term) => term.length > 2 && !stopWords.has(term) && !endpointPathTermNoise.has(term)));
+}
+
+const endpointPathTermNoise = new Set(["return", "returns", "show", "shows", "should"]);
 
 function quoteFtsPhrase(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
