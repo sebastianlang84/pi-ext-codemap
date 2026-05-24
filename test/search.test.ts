@@ -203,6 +203,96 @@ test("search+context read plan promotes context-related tests ahead of lower sea
   );
 });
 
+test("search+context read plan keeps the first direct import before lower search hits", () => {
+  assert.deepEqual(
+    mergeSearchContextReadPlan(
+      [
+        "apps/web/src/lib/series-workbench-backtest-target.ts",
+        "apps/web/src/lib/series-workbench-backtest.ts",
+        "apps/web/src/components/series-workbench.tsx",
+        "apps/web/src/lib/__tests__/series-workbench-backtest-target.test.ts",
+        "apps/web/src/lib/__tests__/series-workbench-backtest.test.ts",
+      ],
+      [
+        { path: "apps/web/src/lib/series-workbench-backtest-target.ts", reasons: [{ kind: "target" }] },
+        { path: "apps/web/src/lib/series-analysis.ts", reasons: [{ kind: "import" }] },
+        { path: "apps/web/src/lib/series-workbench-engine.ts", reasons: [{ kind: "import" }] },
+        { path: "apps/web/src/lib/__tests__/series-workbench-backtest-target.test.ts", reasons: [{ kind: "sibling_test" }, { kind: "reverse_test" }] },
+        { path: "apps/web/src/lib/series-workbench-backtest.ts", reasons: [{ kind: "reverse_import" }] },
+      ],
+      5,
+    ),
+    [
+      "apps/web/src/lib/series-workbench-backtest-target.ts",
+      "apps/web/src/lib/series-workbench-backtest.ts",
+      "apps/web/src/lib/__tests__/series-workbench-backtest-target.test.ts",
+      "apps/web/src/lib/series-analysis.ts",
+      "apps/web/src/components/series-workbench.tsx",
+    ],
+  );
+});
+
+test("search+context read plan does not let direct imports displace config hits", () => {
+  assert.deepEqual(
+    mergeSearchContextReadPlan(
+      ["api/app.py", "docker-compose.webapp.yml"],
+      [
+        { path: "api/app.py", reasons: [{ kind: "target" }] },
+        { path: "docker-compose.webapp.yml", reasons: [{ kind: "near_config" }] },
+        { path: "api/settings.py", reasons: [{ kind: "import" }] },
+      ],
+      2,
+    ),
+    ["api/app.py", "docker-compose.webapp.yml"],
+  );
+});
+
+test("search+context read plan keeps imported-neighbor tests before lower doc hits", () => {
+  assert.deepEqual(
+    mergeSearchContextReadPlan(
+      [
+        "src/pi-extension/turn-intake.ts",
+        "src/pi-extension/retrieval.ts",
+        "docs/user/usage.md",
+        "CHANGELOG.md",
+        "test/pi-extension/turn-intake.test.ts",
+      ],
+      [
+        { path: "src/pi-extension/turn-intake.ts", reasons: [{ kind: "target" }] },
+        { path: "src/core/index.ts", reasons: [{ kind: "import" }] },
+        { path: "src/pi-extension/retrieval.ts", reasons: [{ kind: "import" }] },
+        { path: "test/pi-extension/turn-intake.test.ts", reasons: [{ kind: "sibling_test" }, { kind: "reverse_import" }, { kind: "reverse_test" }] },
+        { path: "test/pi-extension/retrieval.test.ts", reasons: [{ kind: "sibling_test", targetPath: "src/pi-extension/retrieval.ts" }] },
+      ],
+      5,
+    ),
+    [
+      "src/pi-extension/turn-intake.ts",
+      "test/pi-extension/retrieval.test.ts",
+      "test/pi-extension/turn-intake.test.ts",
+      "src/pi-extension/retrieval.ts",
+      "docs/user/usage.md",
+    ],
+  );
+});
+
+test("search+context read plan does not promote sibling tests for non-search import targets", () => {
+  assert.deepEqual(
+    mergeSearchContextReadPlan(
+      ["src/pi-extension/retrieval.ts", "docs/adr/005-simplified-agent-facing-scopes.md", "docs/adr/006-normal-and-advanced-tool-surface.md"],
+      [
+        { path: "src/pi-extension/retrieval.ts", reasons: [{ kind: "target" }] },
+        { path: "src/core/identity-policy.ts", reasons: [{ kind: "import" }] },
+        { path: "test/core/identity-policy.test.ts", reasons: [{ kind: "sibling_test", targetPath: "src/core/identity-policy.ts" }] },
+        { path: "docs/adr/005-simplified-agent-facing-scopes.md", reasons: [{ kind: "related_doc" }] },
+        { path: "docs/adr/006-normal-and-advanced-tool-surface.md", reasons: [{ kind: "related_doc" }] },
+      ],
+      3,
+    ),
+    ["src/pi-extension/retrieval.ts", "docs/adr/005-simplified-agent-facing-scopes.md", "docs/adr/006-normal-and-advanced-tool-surface.md"],
+  );
+});
+
 test("agentic E2E smoke test navigates from search to read-first context", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-agentic-e2e-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

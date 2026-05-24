@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep tests for visible imported neighbors in the scripted search+context read plan, resolving the remaining `pi-ext-memory` baseline retrieval-test miss and bringing local baseline plus natural holdout `codemap_search_context` recall to full coverage without changing public tool schemas.
+- Let the scripted search+context read plan keep context-backed search hits and one direct import when no doc/config or unsearched test/config neighbor competes, resolving the baseline Macrolens `series-analysis.ts` budget miss without changing public tool schemas.
 - Add natural navigation support for handoff preload scope/docs, reviewer-context-scout benchmark docs, and FastAPI compose deployment configs, bringing the expanded natural holdout to full `codemap_search_context` recall without changing public tool schemas.
 - Treat provider files as a navigation role and include tests for non-test reverse importers, resolving the expanded holdout's Macrolens provider-source/test budget miss without changing public tool schemas.
 - Add root README fallback as read-first documentation only when no name/path-specific docs match, resolving the expanded holdout's `sg` binary README-budget miss without changing public tool schemas.
