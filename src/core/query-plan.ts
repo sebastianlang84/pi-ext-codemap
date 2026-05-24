@@ -12,6 +12,7 @@ export interface QueryPlan {
   pathNeedle: string;
   codeIntent: boolean;
   roleIntents: string[];
+  pathTerms: string[];
   ftsQueries: FtsQuery[];
 }
 
@@ -29,6 +30,7 @@ export function planQuery(query: string): QueryPlan {
   const pathNeedle = raw.replace(/^"|"$/g, "");
   const codeIntent = coreTerms.some((term) => codeIntentTerms.has(term));
   const roleIntents = inferRoleIntents(normalized, coreTerms);
+  const pathTerms = inferPathTerms(coreTerms);
   const quotedPhrases = phrases.map(quoteFtsPhrase);
   const quotedTerms = terms.map(quoteFtsPhrase);
   const quotedExpandedTerms = expandedTerms.map(quoteFtsPhrase);
@@ -36,16 +38,18 @@ export function planQuery(query: string): QueryPlan {
   const broadTerms = terms.length > 1 ? expandedTerms : terms.map((term) => term.toLowerCase());
   const prefixTerms = broadTerms.map(toPrefixTerm).filter(Boolean);
   const tiered = phrases.length > 0 || expandedTerms.length > 1;
+  const scopePairQuery = coreTerms.includes("session") && coreTerms.includes("repo") ? `${quoteFtsPhrase("session")} ${quoteFtsPhrase("repo")}` : "";
   const ftsQueries = uniqueFtsQueries([
     ...quotedPhrases.map((query) => ({ query, tierBoost: tiered ? 24 : 0 })),
     { query: quotedTerms.join(" "), tierBoost: tiered ? 18 : 0 },
     { query: quotedCoreTerms.join(" "), tierBoost: tiered ? 16 : 0 },
+    ...(scopePairQuery ? [{ query: scopePairQuery, tierBoost: tiered ? 14 : 0 }] : []),
     { query: quotedExpandedTerms.join(" "), tierBoost: tiered ? 12 : 0 },
     { query: prefixTerms.join(" OR "), tierBoost: tiered ? 8 : 0 },
     { query: broadTerms.map(quoteFtsPhrase).join(" OR "), tierBoost: 0 },
   ].filter((entry) => entry.query));
 
-  return { normalized, terms: expandedTerms, coreTerms, phrases, pathLike, pathNeedle, codeIntent, roleIntents, ftsQueries };
+  return { normalized, terms: expandedTerms, coreTerms, phrases, pathLike, pathNeedle, codeIntent, roleIntents, pathTerms, ftsQueries };
 }
 
 const stopWords = new Set([
@@ -69,12 +73,17 @@ function inferRoleIntents(normalized: string, terms: string[]): string[] {
   if (has("main", "entry", "entrypoint", "orchestrator")) intents.push("implementation", "implementation/main");
   if (has("config", "configuration")) intents.push("configuration");
   if (has("docs", "doc", "documentation")) intents.push("documentation");
+  if (has("adr", "decision", "scope", "scopes")) intents.push("decision_record");
   if (has("tests", "test", "testing")) intents.push("tests");
   if (has("computed")) intents.push("setup/utility");
   if (has("data", "setup", "preparation", "prepare")) intents.push("setup/utility");
   if (has("not be modified", "not modified", "do not modify")) intents.push("overview", "setup/utility");
   if (has("dependencies", "dependency", "package", "pyproject")) intents.push("dependencies");
   return uniqueStrings(intents);
+}
+
+function inferPathTerms(terms: string[]): string[] {
+  return terms.includes("preload") ? ["retrieval"] : [];
 }
 
 function quoteFtsPhrase(value: string): string {
@@ -89,6 +98,8 @@ function expandTerms(terms: string[], compoundSourceTerms = terms): string[] {
       if (normalized.length > 1) expanded.push(normalized);
     }
   }
+  const lowered = new Set(expanded.map((term) => term.toLowerCase()));
+  if (lowered.has("session") && lowered.has("repo")) expanded.push("scope");
   for (const compound of adjacentCompounds(compoundSourceTerms)) expanded.push(compound);
   return uniqueStrings(expanded).slice(0, 16);
 }

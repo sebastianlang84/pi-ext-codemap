@@ -176,7 +176,7 @@ test("search+context read plan preserves visible search hits within the read bud
   );
 });
 
-test("search+context read plan promotes context-related tests into remaining budget", () => {
+test("search+context read plan promotes context-related tests ahead of lower search hits", () => {
   assert.deepEqual(
     mergeSearchContextReadPlan(
       [
@@ -195,10 +195,10 @@ test("search+context read plan promotes context-related tests into remaining bud
     ),
     [
       "apps/web/src/lib/series-workbench-chart.ts",
+      "apps/web/src/lib/__tests__/series-workbench-chart.test.ts",
       "apps/web/src/components/series-workbench.tsx",
       "apps/web/src/lib/use-series-workbench-session.ts",
       "docs/plans/20260502-newsletter-macro-data-integration.md",
-      "apps/web/src/lib/__tests__/series-workbench-chart.test.ts",
     ],
   );
 });
@@ -575,6 +575,190 @@ Dashboard provider no data diagnostics should remain visible in newsletter plans
     "apps/web/src/lib/__tests__/dashboard-pipeline.test.ts",
     "apps/web/src/lib/providers/fred.ts",
     "apps/web/src/lib/providers/yahoo.ts",
+  ]) {
+    assert.ok(readPlan.includes(expectedPath), JSON.stringify({ searchPaths, readFirst: contextResult.readFirst.map((item) => ({ path: item.path, reasons: item.reasons?.map((reason) => reason.kind) })), readPlan }));
+  }
+});
+
+test("natural handoff preload requests keep implementation, test, and active ADRs in the search plus context read plan", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-handoff-preload-read-plan-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src", "pi-extension"), { recursive: true });
+  mkdirSync(join(root, "test", "pi-extension"), { recursive: true });
+  mkdirSync(join(root, "docs", "adr"), { recursive: true });
+  mkdirSync(join(root, "docs", "archive", "plans"), { recursive: true });
+
+  writeFileSync(join(root, "src", "pi-extension", "retrieval.ts"), `
+import { findLatestHandoffForTurn } from "./handoffs";
+
+export function formatLatestHandoffLines(latestHandoff: { isFallback: boolean }) {
+  return [\`Latest active handoff\${latestHandoff.isFallback ? " (fallback; do not overwrite unless explicit)" : ""}:\`];
+}
+
+export function buildTurnMemoryMessage() {
+  const latestHandoff = findLatestHandoffForTurn();
+  return formatLatestHandoffLines(latestHandoff);
+}
+`);
+  writeFileSync(join(root, "src", "pi-extension", "handoffs.ts"), `
+export function findLatestHandoffForTurn() {
+  return { isFallback: true };
+}
+`);
+  writeFileSync(join(root, "test", "pi-extension", "retrieval.test.ts"), `
+import { buildTurnMemoryMessage } from "../../src/pi-extension/retrieval";
+
+test("findLatestHandoffForTurn prefers exact session handoff before repo fallback", () => {
+  expect(buildTurnMemoryMessage()).toContain("Latest active handoff");
+});
+
+test("fallback handoff preload warns agents not to overwrite it", () => {
+  expect(buildTurnMemoryMessage()).toContain("fallback; do not overwrite unless explicit");
+});
+`);
+  writeFileSync(join(root, "docs", "adr", "005-simplified-agent-facing-scopes.md"), `
+# ADR 005 — Simplified agent-facing memory scopes
+
+Use only global, repo, and session as normal agent-facing scopes. Session is short-lived handoff and current-run context; repo is durable repository context.
+`);
+  writeFileSync(join(root, "docs", "adr", "006-normal-and-advanced-tool-surface.md"), `
+# ADR 006 — Normal and Advanced Tool Surface
+
+The simplified scope model favors fewer normal paths: use global, repo, and session. The normal tool surface includes memory_list for active todos and handoffs and memory_save_handoff for explicit handoff writes.
+`);
+  writeFileSync(join(root, "docs", "adr", "007-memory-model-minimisation.md"), `
+# ADR 007 — Memory model minimisation
+
+### Handoff count warning
+
+memory_save_handoff warns when several active handoffs already exist in the same repo.
+`);
+  writeFileSync(join(root, "docs", "archive", "plans", "memory-model-minimisation.md"), `
+# Archived memory model minimisation plan
+
+### Handoff count warning
+
+Archived plan text about active handoff warnings should not displace current implementation, tests, and ADRs.
+`);
+  indexRepo({ cwd: root, approve: true });
+
+  const query = "active handoff preload should prefer current session before repo fallback and warn not to overwrite fallback handoffs";
+  const searchPaths = searchCodeMap({ cwd: root, query, limit: 5 }).map((result) => result.path);
+  const contextResult = codemapContext({ cwd: root, target: searchPaths[0] ?? query, limit: 5 });
+  const readPlan = mergeSearchContextReadPlan(searchPaths, contextResult.readFirst, 5);
+
+  for (const expectedPath of [
+    "src/pi-extension/retrieval.ts",
+    "test/pi-extension/retrieval.test.ts",
+    "docs/adr/005-simplified-agent-facing-scopes.md",
+    "docs/adr/006-normal-and-advanced-tool-surface.md",
+  ]) {
+    assert.ok(readPlan.includes(expectedPath), JSON.stringify({ searchPaths, readFirst: contextResult.readFirst.map((item) => ({ path: item.path, reasons: item.reasons?.map((reason) => reason.kind) })), readPlan }));
+  }
+});
+
+test("natural FastAPI run trigger requests keep compose deployment config in the search plus context read plan", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-fastapi-compose-read-plan-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "api"), { recursive: true });
+  mkdirSync(join(root, "ui"), { recursive: true });
+
+  writeFileSync(join(root, "api", "app.py"), `
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+app = FastAPI(title="fourier-cycles-api")
+
+class TriggerRequest(BaseModel):
+    confirm: bool = False
+
+@app.post("/api/run")
+def trigger_run(request: TriggerRequest):
+    if not request.confirm:
+        raise HTTPException(status_code=400, detail="set confirm=true to trigger a run")
+    raise HTTPException(status_code=409, detail="run already in progress")
+`);
+  writeFileSync(join(root, "docker-compose.webapp.yml"), `
+services:
+  fourier-cycles-api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      FOURIER_TRIGGER_MAX_RUNTIME_SECONDS: "5400"
+`);
+  writeFileSync(join(root, "PRD_webapp.md"), `
+# Fourier Cycles Web App
+
+Phase 2 includes POST /api/run as a controlled FastAPI trigger endpoint.
+`);
+  writeFileSync(join(root, "README.md"), "# Fourier cycles\n\nFastAPI run trigger docs.\n");
+  writeFileSync(join(root, "requirements.txt"), "fastapi\npydantic\n");
+  writeFileSync(join(root, "ui", "tsconfig.app.json"), JSON.stringify({ compilerOptions: {} }, null, 2));
+  indexRepo({ cwd: root, approve: true });
+
+  const query = "FastAPI confirm true run already in progress";
+  const searchPaths = searchCodeMap({ cwd: root, query, limit: 5 }).map((result) => result.path);
+  const contextResult = codemapContext({ cwd: root, target: searchPaths[0] ?? query, limit: 5 });
+  const readPlan = mergeSearchContextReadPlan(searchPaths, contextResult.readFirst, 5);
+
+  for (const expectedPath of ["api/app.py", "docker-compose.webapp.yml", "PRD_webapp.md"]) {
+    assert.ok(readPlan.includes(expectedPath), JSON.stringify({ searchPaths, readFirst: contextResult.readFirst.map((item) => ({ path: item.path, reasons: item.reasons?.map((reason) => reason.kind) })), readPlan }));
+  }
+});
+
+test("natural reviewer context scout requests keep plan, benchmark, and fixtures in the search plus context read plan", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-reviewer-scout-read-plan-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "docs", "plans"), { recursive: true });
+  mkdirSync(join(root, "docs", "benchmarks"), { recursive: true });
+  mkdirSync(join(root, "tests"), { recursive: true });
+  mkdirSync(join(root, "scripts"), { recursive: true });
+
+  writeFileSync(join(root, "docs", "plans", "reviewer-context-scout.md"), `
+# Reviewer context scout
+
+The reviewer context scout should gather bounded contract and nearby test evidence without scout recursion.
+It reads the benchmark fixtures and must not route through fanout reduce plans.
+`);
+  writeFileSync(join(root, "docs", "benchmarks", "reviewer-context-scout-fixtures.json"), JSON.stringify({ cases: [{ name: "bounded contract evidence", scoutRecursion: false }] }, null, 2));
+  writeFileSync(join(root, "tests", "reviewer-context-scout-benchmark.test.mjs"), `
+import fixtures from "../docs/benchmarks/reviewer-context-scout-fixtures.json" with { type: "json" };
+
+test("reviewer context scout gathers bounded nearby test evidence without recursion", () => {
+  assert.equal(fixtures.cases[0].scoutRecursion, false);
+});
+`);
+  writeFileSync(join(root, "scripts", "score-reviewer-context-scout-benchmark.mjs"), `
+import fixtures from "../docs/benchmarks/reviewer-context-scout-fixtures.json" with { type: "json" };
+console.log(fixtures.cases.length);
+`);
+  for (const noisyTest of ["request.test.mjs", "token-injection.test.mjs", "agents.test.mjs", "display.test.mjs"]) {
+    writeFileSync(join(root, "tests", noisyTest), `
+test("ordinary unrelated test evidence", () => {
+  assert.ok(true);
+});
+`);
+  }
+  writeFileSync(join(root, "docs", "plans", "fanout-reduce.md"), `
+# Fanout reduce
+
+Noisy scout recursion material that should not displace the reviewer context scout plan.
+`);
+  indexRepo({ cwd: root, approve: true });
+
+  const query = "reviewer context scout should gather bounded contract and nearby test evidence without scout recursion";
+  const searchPaths = searchCodeMap({ cwd: root, query, limit: 5 }).map((result) => result.path);
+  const contextResult = codemapContext({ cwd: root, target: searchPaths[0] ?? query, limit: 5 });
+  const readPlan = mergeSearchContextReadPlan(searchPaths, contextResult.readFirst, 5);
+
+  for (const expectedPath of [
+    "docs/plans/reviewer-context-scout.md",
+    "docs/benchmarks/reviewer-context-scout-fixtures.json",
+    "tests/reviewer-context-scout-benchmark.test.mjs",
   ]) {
     assert.ok(readPlan.includes(expectedPath), JSON.stringify({ searchPaths, readFirst: contextResult.readFirst.map((item) => ({ path: item.path, reasons: item.reasons?.map((reason) => reason.kind) })), readPlan }));
   }

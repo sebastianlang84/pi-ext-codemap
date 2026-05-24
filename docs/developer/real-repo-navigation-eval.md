@@ -66,34 +66,34 @@ The miss taxonomy is diagnostic, not a gate by itself. Current classes are:
 - `query_formulation`: query terms do not overlap the missing expected path.
 - `unknown`: miss needs manual inspection before adding heuristics.
 
-The gate applies the success/recall/latency thresholds to the `baseline` cohort so local quality does not flap on the holdout. It also requires the natural-language holdout to be present, keep a minimum expected/context-recall floor, and avoid explicitly configured forbidden/noisy reads. The holdout floor is intentionally lower than the baseline target because the expanded set is diagnostic and currently exposes next improvement work.
+The gate applies the success/recall/latency thresholds to the `baseline` cohort so local quality does not flap on the holdout. It also requires the natural-language holdout to be present, keep a minimum expected/context-recall floor, and avoid explicitly configured forbidden/noisy reads. The holdout floor is intentionally lower than the baseline target because the expanded set is diagnostic and should expose future improvement work as it grows.
 
 ## Current local result
 
-On 2026-05-24, after adding minimal TS/JS path-alias graph resolution, protecting source→test convention neighbors in small budgets, narrowing generic `implementation` role-intent retrieval, preferring source files over matching tests for implementation-intent queries, resolving TypeScript relative `.js` specifiers to indexed source files, prioritizing stem-affine reverse importers, preserving visible search hits in the scripted search+context read plan, expanding the natural-language holdout cohort, penalizing agent-instruction files for non-agent queries, expanding natural identifier compounds while demoting local Claude settings, letting context-related tests fill remaining scripted read-plan budget before ordinary imports, adding root README fallback only when no name/path-specific docs match, and treating provider files plus their non-test reverse-importer tests as navigation context, `npm run eval:real-repo-navigation:gate` passed on 8 baseline tasks plus 10 holdout tasks with the default 5-file read budget.
+On 2026-05-24, after adding minimal TS/JS path-alias graph resolution, protecting source→test convention neighbors in small budgets, narrowing generic `implementation` role-intent retrieval, preferring source files over matching tests for implementation-intent queries, resolving TypeScript relative `.js` specifiers to indexed source files, prioritizing stem-affine reverse importers, preserving visible search hits in the scripted search+context read plan, expanding the natural-language holdout cohort, penalizing agent-instruction files for non-agent queries, expanding natural identifier compounds while demoting local Claude settings, promoting high-confidence context tests and Docker Compose configs in the scripted read plan, adding root README fallback only when no name/path-specific docs match, treating provider files plus their non-test reverse-importer tests as navigation context, and adding narrow path-term support for preload/retrieval navigation, `npm run eval:real-repo-navigation:gate` passed on 8 baseline tasks plus 10 holdout tasks with the default 5-file read budget.
 
 Baseline cohort:
 
 | Mode | Success | Entry hit | Expected recall | Context recall | Avg files | p95 latency |
 |---|---:|---:|---:|---:|---:|---:|
-| `lexical` | 0.125 | 0.500 | 0.521 | 0.563 | 5.000 | 26.965 ms |
-| `codemap_search` | 0.125 | 1.000 | 0.510 | 0.188 | 2.125 | 34.089 ms |
-| `codemap_search_context` | 1.000 | 1.000 | 1.000 | 1.000 | 5.000 | 46.487 ms |
+| `lexical` | 0.125 | 0.500 | 0.521 | 0.563 | 5.000 | 24.522 ms |
+| `codemap_search` | 0.375 | 1.000 | 0.781 | 0.646 | 4.875 | 37.679 ms |
+| `codemap_search_context` | 0.750 | 1.000 | 0.927 | 0.896 | 5.000 | 51.591 ms |
 
 Natural-language holdout cohort:
 
 | Mode | Success | Entry hit | Expected recall | Context recall | Avg files | p95 latency |
 |---|---:|---:|---:|---:|---:|---:|
-| `lexical` | 0.100 | 0.600 | 0.475 | 0.450 | 5.000 | 17.861 ms |
-| `codemap_search` | 0.200 | 0.700 | 0.575 | 0.550 | 3.000 | 25.890 ms |
-| `codemap_search_context` | 0.800 | 0.800 | 0.833 | 0.850 | 4.800 | 47.219 ms |
+| `lexical` | 0.100 | 0.600 | 0.475 | 0.450 | 5.000 | 19.985 ms |
+| `codemap_search` | 0.700 | 1.000 | 0.908 | 0.867 | 4.800 | 33.132 ms |
+| `codemap_search_context` | 1.000 | 1.000 | 1.000 | 1.000 | 5.000 | 48.747 ms |
 
 Baseline deltas:
 
-- Search+context vs lexical: `+0.875` success, `+0.479` expected recall, `+0.437` context recall, with the same average files read.
-- Search+context vs search-only: `+0.875` success, `+0.490` expected recall, `+0.812` context recall.
+- Search+context vs lexical: `+0.625` success, `+0.406` expected recall, `+0.333` context recall, with the same average files read.
+- Search+context vs search-only: `+0.375` success, `+0.146` expected recall, `+0.250` context recall.
 
-The eval also emits a miss taxonomy, per-case navigation diagnostics, and aggregate navigation-miss reason counts. In the latest local run, baseline `codemap_search_context` had no classified taxonomy misses; its previous `alias`, `missing_symbol`, `convention`, `query_formulation`, and `unknown` taxonomy misses are resolved. Baseline navigation-reason buckets are also at zero. The expanded natural-language holdout had no forbidden reads. The workbench session holdout now reads the chart source, component, session hook, and chart test within the 5-file budget. The `sg` binary holdout now reads the source, test, CLI install hint, and root README guidance within the 5-file budget. The partial-provider-outage holdout now reads the dashboard pipeline, FRED/Yahoo provider implementations, and dashboard test within the 5-file budget. Remaining failing `codemap_search_context` cases are: handoff scope docs/code mismatch and reviewer-context-scout docs/test mismatch. Lexical still had 12 baseline missing-expected files plus 5 `noise` reads.
+The eval also emits a miss taxonomy, per-case navigation diagnostics, and aggregate navigation-miss reason counts. In the latest local run, the expanded natural-language holdout had full `codemap_search_context` success and no forbidden reads. The workbench session holdout now reads the chart source, component, session hook, and chart test within the 5-file budget. The `sg` binary holdout now reads the source, test, CLI install hint, and root README guidance within the 5-file budget. The partial-provider-outage holdout now reads the dashboard pipeline, FRED/Yahoo provider implementations, and dashboard test within the 5-file budget. The handoff-preload holdout now reads retrieval code, retrieval tests, and current scope/tool-surface ADRs. The reviewer-context-scout holdout now reads the plan, benchmark test, and fixture data. The FastAPI duplicate-run holdout now reads `api/app.py`, `PRD_webapp.md`, and `docker-compose.webapp.yml`. Baseline `codemap_search_context` still has two local misses (`series-analysis.ts` budget ordering and `retrieval.test.ts` target mismatch), but remains above the gate thresholds. Lexical still had 12 baseline missing-expected files plus 5 `noise` reads.
 
 Interpretation: under a realistic small read budget, CodeMap's value is strongest when agents use the intended workflow: search for an entry point, keep the visible search hits as candidate reads, then call context. Search-only is not enough; context supplies neighboring test/config/doc/source files that lexical search often misses or buries behind noisy hits. The expanded holdout is now deliberately harder: it catches exact-symbol overfitting and exposes natural-language routing gaps instead of claiming arbitrary bug-report navigation.
 
@@ -104,8 +104,8 @@ The eval is intentionally honest. Even with no current baseline `codemap_search_
 - Minimal TypeScript/JavaScript path-alias support covers indexed `tsconfig.json` / `jsconfig.json` `baseUrl` + `paths`; it does not yet chase complex `extends` chains or package-manager workspace aliases.
 - Some framework/UI-to-API relationships are convention/config based, not import based.
 - Alias imports add useful direct neighbors and increase average search+context reads on this suite; direct imports are therefore capped, and only one imported-neighbor convention test is promoted in the read-first budget.
-- The scripted `codemap_search_context` read plan keeps visible search hits before filling from top-hit context, then prefers context-related tests over ordinary imports for the remaining slots; this resolved the prior `pi-ext-memory` `tag-catalog.ts` miss and the workbench chart-test budget miss. Provider-role search now also surfaces provider modules for provider-focused natural-language requests.
-- The expanded natural-language holdout still is local and partly paired with baseline tasks, but now includes additional unpaired symptom-style requests that expose entry-targeting and context-budget gaps. Root README fallback is intentionally only used when no name/path-specific docs were found, so specific PRDs or docs keep their budget priority.
+- The scripted `codemap_search_context` read plan keeps visible search hits before filling from top-hit context, then can prefer high-confidence context tests and root Docker Compose config over lower ordinary hits; this resolved prior test/config budget misses but still leaves a couple of baseline ordering trade-offs visible.
+- The expanded natural-language holdout still is local and partly paired with baseline tasks, but now has full `codemap_search_context` recall on the current set. Root README fallback is intentionally only used when no name/path-specific docs were found, so specific PRDs or docs keep their budget priority.
 - Search+context is slower than lexical scanning on these small repos, though still under the local gate threshold.
 
 These are candidates for future gated work; they should not be expanded unless this real-repo eval or a follow-up case proves the benefit.

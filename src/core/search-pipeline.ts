@@ -16,6 +16,7 @@ export function pathFilterForPrefix(pathPrefix: string): string {
 export function collectSearchCandidates(db: ReturnType<typeof openRepoDb>, request: SearchRetrievalRequest): SearchResult[] {
   const results: SearchResult[] = [];
   results.push(...pathMatchCandidates(db, request));
+  results.push(...basenameTermCandidates(db, request));
   results.push(...roleIntentCandidates(db, request));
   for (const ftsQuery of request.plan.ftsQueries) {
     const remaining = Math.max(request.limit * 2 - results.length, request.limit);
@@ -37,6 +38,22 @@ function pathMatchCandidates(db: ReturnType<typeof openRepoDb>, request: SearchR
   return rows.map((row) => toResult(row, request.plan, 30));
 }
 
+function basenameTermCandidates(db: ReturnType<typeof openRepoDb>, request: SearchRetrievalRequest): SearchResult[] {
+  const terms = request.plan.pathTerms.filter((term) => /^[\p{L}\p{N}_-]{4,}$/u.test(term));
+  if (terms.length === 0) return [];
+  const rows = db.prepare(`
+    select path, language, 1 as startLine, 1 as endLine, 'file' as kind, path as text, 0 as rank, size, null as symbolName
+    from files
+    where path like ? escape '\\'
+    order by length(path), path
+    limit 500
+  `).all(request.pathFilter) as unknown as SearchRow[];
+  const termSet = new Set(terms.map((term) => term.toLowerCase()));
+  return rows
+    .filter((row) => termSet.has(fileStem(row.path)))
+    .map((row) => toResult(row, request.plan, 42));
+}
+
 function roleIntentCandidates(db: ReturnType<typeof openRepoDb>, request: SearchRetrievalRequest): SearchResult[] {
   const candidateRoleIntents = request.plan.roleIntents.filter((intent) => intent !== "implementation");
   if (candidateRoleIntents.length === 0) return [];
@@ -51,6 +68,7 @@ function roleIntentCandidates(db: ReturnType<typeof openRepoDb>, request: Search
   `).all(request.pathFilter) as unknown as SearchRow[];
   return rows
     .filter((row) => fileRoleBoost(fileRoles(row.path.toLowerCase(), row.size ?? undefined), candidateRoleIntents) > 0)
+    .filter((row) => !fileRoles(row.path.toLowerCase(), row.size ?? undefined).includes("tests") || matchedTermCount(`${row.path}\n${row.text}`.toLowerCase(), request.plan.coreTerms) >= 3)
     .map((row) => toResult(row, request.plan, 18));
 }
 
@@ -86,6 +104,18 @@ function symbolFtsCandidates(
     limit ?
   `).all(request.ftsQuery.query, request.pathFilter, Math.ceil(request.remaining / 2)) as unknown as SearchRow[];
   return rows.map((row) => toResult(row, request.plan, request.ftsQuery.tierBoost + 4));
+}
+
+function matchedTermCount(text: string, terms: string[]): number {
+  return terms.filter((term) => new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(term)}($|[^\\p{L}\\p{N}])`, "u").test(text)).length;
+}
+
+function fileStem(path: string): string {
+  return (path.split("/").pop() ?? path).toLowerCase().replace(/(?:\.[^.]+)+$/, "");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function escapeLike(value: string): string {

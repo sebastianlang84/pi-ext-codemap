@@ -139,6 +139,8 @@ export function fileRoles(path: string, size = 0): string[] {
   if (["prepare.py", "setup.py"].includes(basename)) roles.push("setup/utility");
   if (path.startsWith("scripts/") || /(?:^|\/)scripts\//.test(path)) roles.push("tooling");
   if (path.startsWith("tests/") || /(?:^|\/)(?:test|tests|__tests__)\//.test(path)) roles.push("tests");
+  if (/(?:^|\/)docs\/archive\//.test(path)) roles.push("archived_documentation");
+  if (/(?:^|\/)docs\/adr\//.test(path)) roles.push("decision_record");
   if (path.startsWith("docs/") || /(?:^|\/)docs\//.test(path) || /\.(?:md|mdx|rst|txt)$/.test(basename)) roles.push("documentation");
   if (["pyproject.toml", "package.json", "requirements.txt", "cargo.toml", "go.mod"].includes(basename)) roles.push("dependencies", "configuration");
   if (/\.(?:json|ya?ml|toml|ini|env)$/.test(basename) && !isLockfilePath(path, basename)) roles.push("configuration");
@@ -167,6 +169,7 @@ function fileRolePenalty(roles: string[], plan: QueryPlan): number {
   if (roles.includes("generated")) penalty += explicit.generated ? 8 : 60;
   if (roles.includes("build_output") || roles.includes("minified")) penalty += explicit.buildOutput ? 12 : 48;
   if (roles.includes("large_json")) penalty += explicit.largeJson ? 12 : 36;
+  if (roles.includes("archived_documentation") && !/\barchive[ds]?\b/.test(plan.normalized)) penalty += 14;
   return penalty;
 }
 
@@ -217,7 +220,7 @@ function matchSnippet(text: string, plan: QueryPlan): string {
 function dedupe(results: SearchResult[]): SearchResult[] {
   const byKey = new Map<string, SearchResult>();
   for (const result of results) {
-    const key = `${result.path}:${result.startLine}:${result.endLine}:${result.kind}`;
+    const key = result.path;
     const previous = byKey.get(key);
     if (!previous || result.score > previous.score) byKey.set(key, result);
   }

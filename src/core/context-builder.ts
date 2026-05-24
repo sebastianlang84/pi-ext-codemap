@@ -312,7 +312,7 @@ function isNearbyConfigPath(base: string, path: string, size: number): boolean {
   const pathDir = dirname(path);
   const stem = base.split("/").pop()?.replace(/\.[^.]+$/, "").toLowerCase() ?? base.toLowerCase();
   const basename = path.split("/").pop()?.toLowerCase() ?? path.toLowerCase();
-  return pathDir === baseDir || basename.includes(stem);
+  return pathDir === baseDir || basename.includes(stem) || /^docker-compose(?:[.-].*)?\.ya?ml$/.test(basename);
 }
 
 function dirname(path: string): string {
