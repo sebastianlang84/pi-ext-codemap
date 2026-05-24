@@ -26,6 +26,21 @@ Run the deterministic quality gate used for closeout/CI:
 npm run bench:search-quality:gate
 ```
 
+Run the same fixture gate with the experimental `ast-grep`-supplemented symbol indexer:
+
+```bash
+node --experimental-strip-types scripts/bench-search-quality.ts --quality-gate --fixtures --experimental-ast-grep-symbols
+```
+
+Compare the default and experimental indexers with isolated state directories:
+
+```bash
+npm run bench:search-quality:ast-compare
+node --experimental-strip-types scripts/bench-search-quality.ts --local-repos --compare-ast-grep-symbols
+```
+
+The comparison report includes both variants plus deltas for quality metrics, p95 search latency, index duration, SQLite bytes, total symbols, duplicate symbol groups, misses, partial misses, and excluded/noisy hits.
+
 Run against explicit repositories for ad hoc tuning:
 
 ```bash
@@ -52,7 +67,7 @@ The benchmark combines two case types.
 
 If `ast-grep` is installed, the benchmark scans supported source files for cheap ground-truth symbols such as functions and classes. Each discovered symbol name becomes a query, and the defining file is the expected path.
 
-This checks whether exact or prefix symbol searches still surface definitions near the top.
+This checks whether exact or prefix symbol searches still surface definitions near the top. The `--experimental-ast-grep-symbols` flag also uses local `ast-grep` matches during indexing, so maintainers can compare the optional structural-symbol prototype against the default cheap regex extractor without changing public tools.
 
 ### Natural-language cases
 
@@ -108,6 +123,8 @@ Repo-selection and custom gate flags:
 --max-p95-ms <milliseconds>
 --fail-on-misses
 --fail-on-partial-misses
+--experimental-ast-grep-symbols
+--compare-ast-grep-symbols
 ```
 
 Custom numeric thresholds must be present and in range. Supplying any custom gate flag also requires at least one evaluated case.
@@ -153,7 +170,7 @@ Do not promote an embedder or reranker to a default path unless it beats the lex
 
 ## Current limitations
 
-- Structural ground truth depends on optional `ast-grep`; without it, only natural cases run.
+- Structural ground truth and the experimental structural-symbol indexer depend on optional local `ast-grep`; without it, only natural cases and cheap regex symbols run.
 - Natural cases are hard-coded in `scripts/bench-search-quality.ts` for checked-in fixtures and optional known local repos.
 - Metrics judge file-path retrieval, not whether the returned snippet is the best possible line range.
 - The benchmark is designed for local tuning and regression checks, not as a universal search benchmark across arbitrary projects.

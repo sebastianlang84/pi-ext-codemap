@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add an internal opt-in `ast-grep`-supplemented symbol indexing prototype plus search-quality benchmark flags, including an isolated default-vs-experimental comparison report, keeping the default indexer and public Pi tool schemas unchanged.
+
 ## 0.5.3 - 2026-05-24
 
 - Expand the local real-repo natural-language navigation holdout from 11 to 16 cases, keeping newly exposed misses visible while the baseline cohort remains fully green.

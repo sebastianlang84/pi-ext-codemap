@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
+import { openRepoDb } from "../src/core/db.ts";
 import { indexRepo } from "../src/core/indexer.ts";
 import { getRepoInfo } from "../src/core/repo.ts";
 import { searchCodeMap } from "../src/core/search.ts";
+import { astGrepSpecsForLanguage } from "../src/core/structural-symbols.ts";
 import {
   evaluateSearchQualityGate,
   scoreSearchQualityCases,
@@ -24,11 +28,44 @@ interface GroundTruthHit {
 
 interface RepoReport {
   root: string;
+  experimentalStructuralSymbols: boolean;
   indexed: ReturnType<typeof indexRepo>;
+  indexMetrics: IndexMetrics;
   astGrepAvailable: boolean;
   astGrepSymbols: number;
   structural: Metrics;
   natural: Metrics;
+}
+
+interface IndexMetrics {
+  durationMs: number;
+  dbBytes: number;
+  files: number;
+  chunks: number;
+  symbols: number;
+  duplicateSymbolGroups: number;
+}
+
+interface ComparisonReport {
+  root: string;
+  baseline: RepoReport;
+  experimental: RepoReport;
+  delta: {
+    indexMetrics: Record<"durationMs" | "dbBytes" | "symbols" | "duplicateSymbolGroups", number>;
+    structural: MetricsDelta;
+    natural: MetricsDelta;
+  };
+}
+
+interface MetricsDelta {
+  top1Accuracy: number;
+  recallAt5: number;
+  expectedCoverageAt5: number;
+  mrrAt5: number;
+  p95LatencyMs: number;
+  misses: number;
+  partialMisses: number;
+  excludedHits: number;
 }
 
 interface ParsedArgs {
@@ -37,6 +74,8 @@ interface ParsedArgs {
   gateEnabled: boolean;
   fixtureRepos: boolean;
   localRepos: boolean;
+  experimentalStructuralSymbols: boolean;
+  compareAstGrepSymbols: boolean;
 }
 
 type SearchCase = SearchQualityCase;
@@ -60,28 +99,18 @@ if (roots.length === 0) {
 }
 
 const astGrepAvailable = hasAstGrep();
-const reports: RepoReport[] = [];
-for (const rootArg of roots) {
-  const root = resolve(rootArg);
-  const info = getRepoInfo(root);
-  const pathPrefix = relative(info.root, root).split("\\").join("/");
-  const indexed = indexRepo({ cwd: root, approve: true, pathPrefix });
-  const symbols = astGrepAvailable ? astGrepSymbols(root, indexed.root).slice(0, 50) : [];
-  const structuralCases = groupedSymbolCases(symbols);
-  const naturalCases = naturalCasesFor(root, indexed.root);
-  reports.push({
-    root,
-    indexed,
-    astGrepAvailable,
-    astGrepSymbols: symbols.length,
-    structural: scoreCases(root, structuralCases, pathPrefix),
-    natural: scoreCases(root, naturalCases, pathPrefix),
-  });
+if (parsed.compareAstGrepSymbols) {
+  const comparisons = roots.map((rootArg) => compareRepo(resolve(rootArg), astGrepAvailable));
+  const gate = evaluateReports(comparisons.flatMap((comparison) => [comparison.baseline, comparison.experimental]), parsed.thresholds);
+  console.log(JSON.stringify({ generatedAt: new Date().toISOString(), compareAstGrepSymbols: true, thresholds: parsed.thresholds, comparisons, gate }, null, 2));
+  if (parsed.gateEnabled && !gate.passed) process.exitCode = 1;
+} else {
+  const useStructuralSymbols = parsed.experimentalStructuralSymbols && astGrepAvailable;
+  const reports = roots.map((rootArg) => reportForRoot(resolve(rootArg), { astGrepAvailable, structuralSymbols: useStructuralSymbols }));
+  const gate = evaluateReports(reports, parsed.thresholds);
+  console.log(JSON.stringify({ generatedAt: new Date().toISOString(), experimentalStructuralSymbols: useStructuralSymbols, thresholds: parsed.thresholds, reports, gate }, null, 2));
+  if (parsed.gateEnabled && !gate.passed) process.exitCode = 1;
 }
-
-const gate = evaluateReports(reports, parsed.thresholds);
-console.log(JSON.stringify({ generatedAt: new Date().toISOString(), thresholds: parsed.thresholds, reports, gate }, null, 2));
-if (parsed.gateEnabled && !gate.passed) process.exitCode = 1;
 
 function parseArgs(args: string[]): ParsedArgs {
   const roots: string[] = [];
@@ -89,6 +118,8 @@ function parseArgs(args: string[]): ParsedArgs {
   let gateEnabled = false;
   let fixtureRepos = false;
   let localRepos = false;
+  let experimentalStructuralSymbols = false;
+  let compareAstGrepSymbols = false;
   const applyDefaultGate = () => {
     thresholds.minTop1Accuracy ??= 0.6;
     thresholds.minRecallAt5 ??= 1;
@@ -109,6 +140,10 @@ function parseArgs(args: string[]): ParsedArgs {
       fixtureRepos = true;
     } else if (arg === "--local-repos") {
       localRepos = true;
+    } else if (arg === "--experimental-ast-grep-symbols") {
+      experimentalStructuralSymbols = true;
+    } else if (arg === "--compare-ast-grep-symbols") {
+      compareAstGrepSymbols = true;
     } else if (name === "--min-top1") {
       thresholds.minTop1Accuracy = parseRateArg(name, value);
       thresholds.requireCases ??= true;
@@ -149,7 +184,103 @@ function parseArgs(args: string[]): ParsedArgs {
     }
   }
   if (fixtureRepos && localRepos) throw new Error("Use either --fixtures or --local-repos, not both");
-  return { roots, thresholds, gateEnabled, fixtureRepos, localRepos };
+  return { roots, thresholds, gateEnabled, fixtureRepos, localRepos, experimentalStructuralSymbols, compareAstGrepSymbols };
+}
+
+function compareRepo(root: string, astGrepAvailable: boolean): ComparisonReport {
+  const baselineStateDir = mkdtempSync(join(tmpdir(), "pi-codemap-ast-baseline-"));
+  const experimentalStateDir = mkdtempSync(join(tmpdir(), "pi-codemap-ast-experimental-"));
+  try {
+    const baseline = reportForRoot(root, { astGrepAvailable, structuralSymbols: false, stateDir: baselineStateDir });
+    const experimental = reportForRoot(root, { astGrepAvailable, structuralSymbols: astGrepAvailable, stateDir: experimentalStateDir });
+    return { root, baseline, experimental, delta: compareReports(baseline, experimental) };
+  } finally {
+    rmSync(baselineStateDir, { recursive: true, force: true });
+    rmSync(experimentalStateDir, { recursive: true, force: true });
+  }
+}
+
+function reportForRoot(root: string, options: { astGrepAvailable: boolean; structuralSymbols: boolean; stateDir?: string }): RepoReport {
+  const info = getRepoInfo(root, { stateDir: options.stateDir });
+  const pathPrefix = relative(info.root, root).split("\\").join("/");
+  const start = performance.now();
+  const indexed = indexRepo({ cwd: root, approve: true, pathPrefix, experimentalStructuralSymbols: options.structuralSymbols, stateDir: options.stateDir });
+  const indexMetrics = readIndexMetrics(indexed.dbPath, performance.now() - start, pathPrefix);
+  const symbols = options.astGrepAvailable ? astGrepSymbols(root, indexed.root).slice(0, 50) : [];
+  const structuralCases = groupedSymbolCases(symbols);
+  const naturalCases = naturalCasesFor(root, indexed.root);
+  return {
+    root,
+    experimentalStructuralSymbols: options.structuralSymbols,
+    indexed,
+    indexMetrics,
+    astGrepAvailable: options.astGrepAvailable,
+    astGrepSymbols: symbols.length,
+    structural: scoreCases(root, structuralCases, pathPrefix, options.stateDir),
+    natural: scoreCases(root, naturalCases, pathPrefix, options.stateDir),
+  };
+}
+
+function compareReports(baseline: RepoReport, experimental: RepoReport): ComparisonReport["delta"] {
+  return {
+    indexMetrics: {
+      durationMs: roundDelta(experimental.indexMetrics.durationMs - baseline.indexMetrics.durationMs),
+      dbBytes: experimental.indexMetrics.dbBytes - baseline.indexMetrics.dbBytes,
+      symbols: experimental.indexMetrics.symbols - baseline.indexMetrics.symbols,
+      duplicateSymbolGroups: experimental.indexMetrics.duplicateSymbolGroups - baseline.indexMetrics.duplicateSymbolGroups,
+    },
+    structural: compareMetrics(baseline.structural, experimental.structural),
+    natural: compareMetrics(baseline.natural, experimental.natural),
+  };
+}
+
+function compareMetrics(baseline: Metrics, experimental: Metrics): MetricsDelta {
+  return {
+    top1Accuracy: roundDelta(experimental.top1Accuracy - baseline.top1Accuracy),
+    recallAt5: roundDelta(experimental.recallAt5 - baseline.recallAt5),
+    expectedCoverageAt5: roundDelta(experimental.expectedCoverageAt5 - baseline.expectedCoverageAt5),
+    mrrAt5: roundDelta(experimental.mrrAt5 - baseline.mrrAt5),
+    p95LatencyMs: roundDelta(experimental.p95LatencyMs - baseline.p95LatencyMs),
+    misses: experimental.misses.length - baseline.misses.length,
+    partialMisses: experimental.partialMisses.length - baseline.partialMisses.length,
+    excludedHits: experimental.excludedHits.length - baseline.excludedHits.length,
+  };
+}
+
+function readIndexMetrics(dbPath: string, durationMs: number, pathPrefix: string): IndexMetrics {
+  const db = openRepoDb(dbPath);
+  const pathFilter = pathPrefix ? `${escapeLike(pathPrefix)}%` : "%";
+  try {
+    const row = db.prepare(`
+      select
+        (select count(*) from files where path like ? escape '\\') as files,
+        (select count(*) from chunks c join files f on f.id = c.file_id where f.path like ? escape '\\') as chunks,
+        (select count(*) from symbols s join files f on f.id = s.file_id where f.path like ? escape '\\') as symbols,
+        (select count(*) from (
+          select s.file_id, s.name, s.start_line, count(*) as c
+          from symbols s
+          join files f on f.id = s.file_id
+          where f.path like ? escape '\\'
+          group by s.file_id, s.name, s.start_line
+          having c > 1
+        )) as duplicateSymbolGroups
+    `).get(pathFilter, pathFilter, pathFilter, pathFilter) as Omit<IndexMetrics, "durationMs" | "dbBytes">;
+    return { durationMs: roundDelta(durationMs), dbBytes: sqliteBytes(dbPath), ...row };
+  } finally {
+    db.close();
+  }
+}
+
+function sqliteBytes(dbPath: string): number {
+  return [dbPath, `${dbPath}-wal`, `${dbPath}-shm`].reduce((total, path) => total + (existsSync(path) ? statSync(path).size : 0), 0);
+}
+
+function roundDelta(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
 function resolveBenchmarkRoots(parsed: ParsedArgs): string[] {
@@ -203,11 +334,9 @@ function hasAstGrep(): boolean {
 
 function astGrepSymbols(searchRoot: string, indexRoot: string): GroundTruthHit[] {
   const specs = [
-    { language: "typescript", kind: "function", pattern: "function $NAME($$$) { $$$ }", globs: ["*.ts", "*.tsx"] },
-    { language: "typescript", kind: "class", pattern: "class $NAME { $$$ }", globs: ["*.ts", "*.tsx"] },
-    { language: "typescript", kind: "const-arrow", pattern: "const $NAME = ($$$) => $$$", globs: ["*.ts", "*.tsx"] },
-    { language: "javascript", kind: "function", pattern: "function $NAME($$$) { $$$ }", globs: ["*.js", "*.jsx", "*.mjs", "*.cjs"] },
-    { language: "python", kind: "function", pattern: "def $NAME($$$): $$$", globs: ["*.py"] },
+    ...astGrepSpecsForLanguage("typescript").map((spec) => ({ ...spec, globs: ["*.ts", "*.tsx"] })),
+    ...astGrepSpecsForLanguage("javascript").map((spec) => ({ ...spec, globs: ["*.js", "*.jsx", "*.mjs", "*.cjs"] })),
+    ...astGrepSpecsForLanguage("python").map((spec) => ({ ...spec, globs: ["*.py"] })),
   ];
   const hits: GroundTruthHit[] = [];
   for (const spec of specs) {
@@ -309,8 +438,8 @@ function genericRepoShapeCases(
   ]);
 }
 
-function scoreCases(root: string, cases: SearchCase[], pathPrefix = ""): Metrics {
-  return scoreSearchQualityCases(cases, (query) => searchCodeMap({ cwd: root, query, limit: 5, pathPrefix }).map((result) => result.path));
+function scoreCases(root: string, cases: SearchCase[], pathPrefix = "", stateDir?: string): Metrics {
+  return scoreSearchQualityCases(cases, (query) => searchCodeMap({ cwd: root, query, limit: 5, pathPrefix, stateDir }).map((result) => result.path));
 }
 
 function groupedSymbolCases(hits: GroundTruthHit[]): SearchCase[] {

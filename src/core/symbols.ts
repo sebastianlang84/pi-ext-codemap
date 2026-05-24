@@ -1,9 +1,15 @@
+import { extractAstGrepSymbols } from "./structural-symbols.ts";
+
 export interface ExtractedSymbol {
   name: string;
   kind: string;
   startLine: number;
   endLine?: number;
   signature?: string;
+}
+
+export interface SymbolExtractionOptions {
+  structural?: boolean;
 }
 
 const patterns: Array<{ kind: string; rx: RegExp }> = [
@@ -18,7 +24,7 @@ const patterns: Array<{ kind: string; rx: RegExp }> = [
   { kind: "heading", rx: /^\s{0,3}#{1,6}\s+(.+)/ },
 ];
 
-export function extractSymbols(text: string, language: string): ExtractedSymbol[] {
+export function extractSymbols(text: string, language: string, options: SymbolExtractionOptions = {}): ExtractedSymbol[] {
   const symbols: ExtractedSymbol[] = [];
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
@@ -35,5 +41,21 @@ export function extractSymbols(text: string, language: string): ExtractedSymbol[
       break;
     }
   }
-  return symbols;
+  return options.structural ? mergeSymbols(symbols, extractAstGrepSymbols(text, language)) : symbols;
+}
+
+function mergeSymbols(primary: ExtractedSymbol[], secondary: ExtractedSymbol[]): ExtractedSymbol[] {
+  const merged = [...primary];
+  const seen = new Set(primary.map(symbolKey));
+  for (const symbol of secondary) {
+    const key = symbolKey(symbol);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(symbol);
+  }
+  return merged;
+}
+
+function symbolKey(symbol: ExtractedSymbol): string {
+  return `${symbol.name}:${symbol.startLine}`;
 }

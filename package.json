@@ -41,6 +41,7 @@
     "bench:search-quality": "node --experimental-strip-types scripts/bench-search-quality.ts --fixtures",
     "bench:search-quality:gate": "node --experimental-strip-types scripts/bench-search-quality.ts --quality-gate --fixtures",
     "bench:search-quality:local": "node --experimental-strip-types scripts/bench-search-quality.ts --local-repos",
+    "bench:search-quality:ast-compare": "node --experimental-strip-types scripts/bench-search-quality.ts --fixtures --compare-ast-grep-symbols",
     "bench:graph-budget": "node --experimental-strip-types scripts/bench-graph-budget.ts --fixtures",
     "bench:graph-budget:local": "node --experimental-strip-types scripts/bench-graph-budget.ts --local-repos",
     "bench:context-quality": "node --experimental-strip-types scripts/bench-context-quality.ts --fixtures",

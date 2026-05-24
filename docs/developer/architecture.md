@@ -139,6 +139,8 @@ Default indexing is whitelist-first. The scanner should:
 
 Lockfiles are supported text files, not generated binaries. They may be indexed for explicit lockfile queries but are penalized in ordinary ranking and filtered from related read-first neighbors.
 
+Symbol extraction defaults to cheap deterministic regexes. An internal opt-in `experimentalStructuralSymbols` index path can supplement symbols with local `ast-grep` CLI matches when present; it is eval/prototype-only and does not change the public Pi tool schema or make `ast-grep` a runtime dependency.
+
 ## Search and ranking
 
 V1 ranking is deterministic and lexical/local-first. Embeddings are not part of V1 ranking.

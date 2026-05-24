@@ -19,17 +19,21 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
 
 ## Nächste sinnvolle Slices — vorgeschlagene Reihenfolge
 
-1. [ ] Nächsten Expanded-Natural-Holdout-Fix-Slice auswählen.
-   - Aktuelle sichtbare Misses im Natural-Holdout-`codemap_search_context`: Macro-Signal-Threshold-Source-Targeting, Audit-ADR-Nachbarn, Repo-Agent-Trust-Source-Targeting und ast-grep-Truncation-Formatter/Test-Nachbarn. Baseline bleibt voll grün.
+1. [ ] Opt-in `ast-grep`-Structural-Symbol-Prototyp behalten oder verwerfen — **nur nach dickem Eval**.
+   - Stand: interner `experimentalStructuralSymbols`-Indexpfad und Benchmark-Flag sind vorhanden; Default bleibt cheap regex, kein public Tool/Schema und keine harte Runtime-Abhängigkeit.
+   - Aktueller Eval-Befund: Fixture-Gate bleibt grün; erster isolierter Local-Compare zeigt keinen Recall-/MRR-Gewinn und keine Noise-Regressions; Experimental erhöht Indexzeit deutlich (z. B. MacroLens +~1.85s) und fügt nur wenige Symbole hinzu.
+   - Gestartet: `--compare-ast-grep-symbols` / `npm run bench:search-quality:ast-compare` vergleicht Default vs. Experimental mit isoliertem State und reportet Recall/MRR/Top1, p95, Indexzeit, DB-Größe, Symbolanzahl, Duplicate-Gruppen und Noise-Hits.
+   - Muss vor jeder Default-/Ausbau-Entscheidung weiter breit getestet werden: Fixture + lokale Real-Repos + gezielter Structural-Holdout, jeweils mit wiederholten Runs und dokumentierten Deltas.
+   - Holdout-Ideen: typed async arrow handlers, generic arrow functions, exported const aliases, JS async arrows, Python classes, parser-fehlerhafte Dateien, generated/build-noise, fehlendes `ast-grep` im PATH, große Repos und pathPrefix-Reindex.
+   - Keep/kill-Regel: behalten nur bei wiederholbarem Recall-/MRR-Gewinn ohne relevante Latenz-/Noise-/Portability-Regression; sonst Prototype entfernen oder weiter parked lassen.
+
+2. [ ] Nächsten Expanded-Natural-Holdout-Fix-Slice nur bei neuem konkretem Miss auswählen.
+   - Aktueller Release-Stand: Baseline und Natural-Holdout waren vor `0.5.3` voll grün; alte Miss-Listen nicht als aktive Defekte behandeln.
    - Regel: erst Diagnose/öffentlicher Regressionstest, dann maximal ein Hebel; keine Query-/Threshold-Änderung als Ersatz für Systemverbesserung.
 
-2. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
+3. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
    - Kandidaten: Route↔Handler, UI↔API, Provider/Hook↔Consumer, Config-Key↔Nutzung; Source↔Test nur wieder anfassen, wenn ein neuer Eval-Miss nicht durch Entry/Search-Ranking verursacht ist.
    - Regel: pro Konvention ein Fixture/Real-Repo-Case, eigene Metrik, keine breite Heuristik ohne messbaren Gewinn.
-
-3. [ ] ast-grep/AST-gestützten Structural-Analyzer als Prototyp evaluieren.
-   - Ziel: prüfen, ob AST-Beziehungen CodeMap-Context verbessern, ohne CodeMap zu einem vollständigen ast-grep-Ersatz zu machen.
-   - Scope: zuerst eval-/index-intern und optional; keine harte Runtime-Abhängigkeit und kein neues prompt-facing Tool, bevor Recall/Budget/Noise klar besser sind.
 
 ## Parked / später
 
