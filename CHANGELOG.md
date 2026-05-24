@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.3 - 2026-05-24
+
 - Expand the local real-repo natural-language navigation holdout from 11 to 16 cases, keeping newly exposed misses visible while the baseline cohort remains fully green.
 - Add endpoint path-term route candidates and route-adapter import/test ordering, resolving the expanded holdout's catalog endpoint route/source/test miss without changing public tool schemas.
 - Defer archived docs behind active search/context candidates in scripted search+context read plans, avoiding a noisy archived-plan read in the expanded holdout without changing public tool schemas.
