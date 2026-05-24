@@ -224,6 +224,11 @@ function relatedPaths(db: ReturnType<typeof openRepoDb>, base: string, pathFilte
     where language = 'markdown' and (path like ? escape '\\' or path like ? escape '\\') and path like ? escape '\\'
     order by path
   `).all(stemLike, baseLike, pathFilter) as Array<{ path: string; size: number }>;
+  const overviewDocs = db.prepare(`
+    select path, size from files
+    where language = 'markdown' and (lower(path) = 'readme.md' or lower(path) like '%/readme.md') and path like ? escape '\\'
+    order by length(path), path
+  `).all(pathFilter) as Array<{ path: string; size: number }>;
   const possibleConfigs = db.prepare(`
     select path, size from files
     where path <> ? and path like ? escape '\\'
@@ -247,7 +252,7 @@ function relatedPaths(db: ReturnType<typeof openRepoDb>, base: string, pathFilte
   return {
     configs,
     tests: findRelatedTestPaths(db, base, pathFilter),
-    docs: sortByLocality(base, relatedDocs.filter((row) => !isNoisyReadFirstPath(row.path, row.size)).map((row) => row.path)).slice(0, 8),
+    docs: sortByLocality(base, uniqueStrings((relatedDocs.length > 0 ? relatedDocs : overviewDocs).filter((row) => !isNoisyReadFirstPath(row.path, row.size)).map((row) => row.path))).slice(0, 8),
     sameDir,
     testOf,
   };
@@ -341,5 +346,9 @@ function localityScore(base: string, path: string): number {
 
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 

@@ -488,6 +488,100 @@ test("rejects ambiguous sg shadow utils command", () => resolveAstGrepBinaryPath
   assert.ok(agentIndex === -1 || agentIndex > sourceIndex, JSON.stringify(results.map((result) => ({ path: result.path, score: result.score }))));
 });
 
+test("natural binary install guidance requests keep README in the search plus context read plan", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-binary-guidance-read-plan-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src", "ast-grep"), { recursive: true });
+  mkdirSync(join(root, "test"), { recursive: true });
+
+  writeFileSync(join(root, "README.md"), `
+# ast-grep binary guidance
+
+## Installation
+
+Install ast-grep yourself first:
+
+\`\`\`bash
+cargo install ast-grep --locked
+brew install ast-grep
+npm install -g @ast-grep/cli
+\`\`\`
+
+## Binary trust model
+
+The command name sg is ambiguous on Unix-like systems. Some systems provide sg from shadow-utils/newgrp.
+This extension validates sg --version and rejects sg unless the version output identifies ast-grep.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| sg exists but is ignored | It is likely not ast-grep; install ast-grep or ensure ast-grep's sg appears first on PATH. |
+`);
+  writeFileSync(join(root, "src", "ast-grep", "binary-path.ts"), `
+export function getCandidatePaths() {
+  return ["ast-grep", "sg"];
+}
+
+export function findOnPath(baseName: "ast-grep" | "sg") {
+  return getCandidatePaths().filter((candidate) => candidate === baseName);
+}
+
+export function getBinaryNames(baseName: "ast-grep" | "sg") {
+  return [baseName];
+}
+
+export function runVersionCommand(binaryPath: string) {
+  return binaryPath.includes("sg") ? "sg from shadow utils command" : "ast-grep";
+}
+
+export function isAstGrepVersionOutput(output: string) {
+  return output.includes("ast-grep");
+}
+
+export function validateCandidate(candidate: string) {
+  return isAstGrepVersionOutput(runVersionCommand(candidate));
+}
+
+export function resolveAstGrepBinaryPath(candidate: string) {
+  if (candidate === "sg") throw new Error("ambiguous sg shadow utils command; install ast-grep");
+  return candidate;
+}
+`);
+  writeFileSync(join(root, "src", "ast-grep", "cli.ts"), `
+import { resolveAstGrepBinaryPath } from "./binary-path";
+
+export const INSTALL_HINT = "Install ast-grep locally with cargo install ast-grep --locked, brew install ast-grep, or npm install -g @ast-grep/cli. The sg command is accepted only when sg --version identifies ast-grep.";
+
+export async function runSg(candidate: string) {
+  return resolveAstGrepBinaryPath(candidate) ?? INSTALL_HINT;
+}
+`);
+  writeFileSync(join(root, "src", "ast-grep", "tools.ts"), `
+import { resolveAstGrepBinaryPath } from "./binary-path";
+export const toolBinary = resolveAstGrepBinaryPath;
+`);
+  writeFileSync(join(root, "src", "index.ts"), `
+export { resolveAstGrepBinaryPath } from "./ast-grep/binary-path";
+`);
+  writeFileSync(join(root, "test", "binary-path.test.ts"), `
+import { resolveAstGrepBinaryPath } from "../src/ast-grep/binary-path";
+
+test("rejects ambiguous sg shadow utils command", () => resolveAstGrepBinaryPath("sg"));
+`);
+  indexRepo({ cwd: root, approve: true });
+
+  const query = "ast grep binary path should reject ambiguous sg shadow utils command and show install guidance";
+  const searchPaths = searchCodeMap({ cwd: root, query, limit: 5 }).map((result) => result.path);
+  const contextResult = codemapContext({ cwd: root, target: searchPaths[0] ?? query, limit: 5 });
+  const readPlan = mergeSearchContextReadPlan(searchPaths, contextResult.readFirst, 5);
+
+  for (const expectedPath of ["src/ast-grep/binary-path.ts", "test/binary-path.test.ts", "src/ast-grep/cli.ts", "README.md"]) {
+    assert.ok(readPlan.includes(expectedPath), JSON.stringify({ searchPaths, readFirst: contextResult.readFirst.map((item) => ({ path: item.path, reasons: item.reasons?.map((reason) => reason.kind) })), readPlan }));
+  }
+});
+
 test("natural identifier pairs keep compact code terms without prose compounds", () => {
   const plan = planQuery("workbench chart interval and x range settings should survive reload from local storage");
 

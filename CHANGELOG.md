@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add root README fallback as read-first documentation only when no name/path-specific docs match, resolving the expanded holdout's `sg` binary README-budget miss without changing public tool schemas.
 - Prefer context-related tests when the scripted search+context read plan fills remaining budget, resolving the expanded holdout's workbench chart-test miss without changing public tool schemas.
 - Expand natural identifier-pair search terms and demote local Claude settings for ordinary searches, improving the expanded holdout's workbench-session entry recall without changing public tool schemas.
 - Penalize agent-instruction files for non-agent search queries, resolving the expanded holdout's ambiguous `sg` binary target mismatch without changing public tool schemas.
