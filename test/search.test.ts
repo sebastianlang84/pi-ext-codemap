@@ -488,6 +488,98 @@ test("rejects ambiguous sg shadow utils command", () => resolveAstGrepBinaryPath
   assert.ok(agentIndex === -1 || agentIndex > sourceIndex, JSON.stringify(results.map((result) => ({ path: result.path, score: result.score }))));
 });
 
+test("natural provider outage requests keep provider implementations in the search plus context read plan", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-provider-outage-read-plan-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "apps", "web", "src", "lib", "providers"), { recursive: true });
+  mkdirSync(join(root, "apps", "web", "src", "lib", "__tests__"), { recursive: true });
+  mkdirSync(join(root, "apps", "web", "src", "types"), { recursive: true });
+  mkdirSync(join(root, "docs", "plans"), { recursive: true });
+
+  writeFileSync(join(root, "apps", "web", "src", "lib", "dashboard-pipeline.ts"), `
+import { deriveMacroSignals } from "./macro-derivations";
+import { appendMarginDebtDerivedSeries } from "./margin-debt-derivations";
+import { fetchFredSeries } from "./providers/fred";
+import { fetchYahooSeries } from "./providers/yahoo";
+import type { MacroSeries } from "../types/macro";
+
+export interface ProviderDiagnostics {
+  source: "fred" | "yahoo";
+  seriesCount: number;
+  withDataCount: number;
+  errorCount: number;
+}
+
+export function summarizeProviderDiagnostics(series: MacroSeries[]): ProviderDiagnostics[] {
+  return ["fred", "yahoo"].map((source) => ({
+    source: source as "fred" | "yahoo",
+    seriesCount: series.filter((item) => item.source === source).length,
+    withDataCount: series.filter((item) => item.source === source && item.points.length > 0).length,
+    errorCount: series.filter((item) => item.source === source && item.error).length,
+  }));
+}
+
+export function dashboardProviderNoDataDiagnosticsShouldKeepFredAndYahooSeriesWhenOneMarketSourceIsEmpty(series: MacroSeries[]) {
+  return summarizeProviderDiagnostics(series);
+}
+
+export async function runDashboardPipeline() {
+  const series = appendMarginDebtDerivedSeries([
+    await fetchFredSeries(),
+    await fetchYahooSeries(),
+  ]);
+  return { diagnostics: dashboardProviderNoDataDiagnosticsShouldKeepFredAndYahooSeriesWhenOneMarketSourceIsEmpty(series), signals: deriveMacroSignals(series) };
+}
+`);
+  writeFileSync(join(root, "apps", "web", "src", "lib", "providers", "fred.ts"), `
+export async function fetchFredSeries() {
+  return { source: "fred", points: [], error: "FRED provider has no data" };
+}
+`);
+  writeFileSync(join(root, "apps", "web", "src", "lib", "providers", "yahoo.ts"), `
+export async function fetchYahooSeries() {
+  return { source: "yahoo", points: [], error: "Yahoo market source is empty" };
+}
+`);
+  writeFileSync(join(root, "apps", "web", "src", "lib", "macro-derivations.ts"), `
+export function deriveMacroSignals(series: unknown[]) { return series.length; }
+`);
+  writeFileSync(join(root, "apps", "web", "src", "lib", "margin-debt-derivations.ts"), `
+export function appendMarginDebtDerivedSeries(series: unknown[]) { return series; }
+`);
+  writeFileSync(join(root, "apps", "web", "src", "types", "macro.ts"), `
+export interface MacroSeries { source: "fred" | "yahoo"; points: unknown[]; error?: string; }
+`);
+  writeFileSync(join(root, "apps", "web", "src", "lib", "__tests__", "dashboard-pipeline.test.ts"), `
+import { summarizeProviderDiagnostics } from "../dashboard-pipeline";
+
+test("keeps provider no data diagnostics for partial outages", () => {
+  expect(summarizeProviderDiagnostics([{ source: "fred", points: [], error: "missing" }, { source: "yahoo", points: [1] }])).toHaveLength(2);
+});
+`);
+  writeFileSync(join(root, "docs", "plans", "macro-data-integration.md"), `
+# Newsletter macro data integration
+
+Dashboard provider no data diagnostics should remain visible in newsletter plans.
+`);
+  indexRepo({ cwd: root, approve: true });
+
+  const query = "dashboard provider no data diagnostics should keep FRED and Yahoo series when one market source is empty";
+  const searchPaths = searchCodeMap({ cwd: root, query, limit: 5 }).map((result) => result.path);
+  const contextResult = codemapContext({ cwd: root, target: searchPaths[0] ?? query, limit: 5 });
+  const readPlan = mergeSearchContextReadPlan(searchPaths, contextResult.readFirst, 5);
+
+  for (const expectedPath of [
+    "apps/web/src/lib/dashboard-pipeline.ts",
+    "apps/web/src/lib/__tests__/dashboard-pipeline.test.ts",
+    "apps/web/src/lib/providers/fred.ts",
+    "apps/web/src/lib/providers/yahoo.ts",
+  ]) {
+    assert.ok(readPlan.includes(expectedPath), JSON.stringify({ searchPaths, readFirst: contextResult.readFirst.map((item) => ({ path: item.path, reasons: item.reasons?.map((reason) => reason.kind) })), readPlan }));
+  }
+});
+
 test("natural binary install guidance requests keep README in the search plus context read plan", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-binary-guidance-read-plan-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

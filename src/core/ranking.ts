@@ -134,6 +134,7 @@ export function fileRoles(path: string, size = 0): string[] {
   if (["program.md", "agents.md", "claude.md"].includes(basename)) roles.push("agent_instructions");
   if (path === ".claude/settings.local.json") roles.push("local_agent_settings");
   if (path.startsWith("src/") || /(?:^|\/)src\//.test(path)) roles.push("implementation");
+  if (parts.some((part) => part === "providers") || /(?:^|[._-])provider(?:[._-]|\.|$)/.test(basename)) roles.push("provider");
   if (["train.py", "main.py", "index.ts", "index.js"].includes(basename)) roles.push("implementation", "implementation/main");
   if (["prepare.py", "setup.py"].includes(basename)) roles.push("setup/utility");
   if (path.startsWith("scripts/") || /(?:^|\/)scripts\//.test(path)) roles.push("tooling");

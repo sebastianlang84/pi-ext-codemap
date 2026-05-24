@@ -64,7 +64,8 @@ function inferRoleIntents(normalized: string, terms: string[]): string[] {
   if (has("what is this project", "project about", "overview", "purpose")) intents.push("overview");
   if (has("agent", "agents", "instructions", "program", "claude")) intents.push("agent_instructions");
   if (has("edit")) intents.push("overview", "agent_instructions", "implementation/main");
-  if (has("implemented", "implementation", "source", "defined", "architecture", "model", "used", "orchestrator", "pipeline", "run")) intents.push("implementation");
+  if (has("implemented", "implementation", "source", "defined", "architecture", "model", "used", "orchestrator", "pipeline", "provider", "run")) intents.push("implementation");
+  if (has("provider", "providers")) intents.push("provider");
   if (has("main", "entry", "entrypoint", "orchestrator")) intents.push("implementation", "implementation/main");
   if (has("config", "configuration")) intents.push("configuration");
   if (has("docs", "doc", "documentation")) intents.push("documentation");
