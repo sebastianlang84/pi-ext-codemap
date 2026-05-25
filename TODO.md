@@ -20,10 +20,10 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
 ## Nächste sinnvolle Slices — vorgeschlagene Reihenfolge
 
 1. [ ] Test-/Script-Monolith Deepening: nächsten Refactor-Slice auswählen und umsetzen.
-   - Erledigt: `test/` heißt jetzt `tests/`; Storage-/Migration-Verträge liegen in `tests/storage.test.ts`, Pi-Adapter-Verträge in `tests/pi-extension.test.ts`, gemeinsame Temp-Repo/Home-Fixtures liegen in `tests/helpers/repo-fixture.ts`, und die reinen Search+Context-Read-Plan-Verträge liegen in `tests/search-read-plan.test.ts`.
-   - Review-Befund: `tests/search.test.ts` (~2.1k Zeilen) mischt weiterhin Search/Ranking, integrierte Context/Read-Plan-Cases und Eval-Diagnostik; mehrere `scripts/*.ts` duplizieren Navigation-Eval-Modelle, CLI-Parsing, Gate-/Metriklogik und Fixture-/Repo-Setup.
+   - Erledigt: `test/` heißt jetzt `tests/`; Storage-/Migration-Verträge liegen in `tests/storage.test.ts`, Pi-Adapter-Verträge in `tests/pi-extension.test.ts`, gemeinsame Temp-Repo/Home-Fixtures liegen in `tests/helpers/repo-fixture.ts`, die reinen Search+Context-Read-Plan-Verträge liegen in `tests/search-read-plan.test.ts`, reine Eval-Diagnostik-/Miss-Taxonomy-Verträge liegen in `tests/search-eval-diagnostics.test.ts`, der Eval-Report-Smoke liegt in `tests/search-eval-report.test.ts`, und reine Query-Plan-/Ranking-Verträge liegen in `tests/search-ranking.test.ts`.
+   - Review-Befund: `tests/search.test.ts` (~1.8k Zeilen) mischt weiterhin integrierte Search/Ranking-Diagnostics und Context/Read-Plan-Cases; mehrere `scripts/*.ts` duplizieren Navigation-Eval-Modelle, CLI-Parsing, Gate-/Metriklogik und Fixture-/Repo-Setup.
    - Priorisierte Kandidaten:
-     1. `tests/search.test.ts` weiter nach öffentlichem Seam splitten: Search/Ranking, Context/Read-Plan, Eval-Diagnostik.
+     1. `tests/search.test.ts` weiter nach öffentlichem Seam splitten: integrierte Search/Ranking-Diagnostics, Context/Read-Plan.
      2. Weitere Test-Fixture-Helfer nur dort extrahieren, wo sie mehrere neue Suites vereinfachen; case-spezifische Inhalte inline lassen.
      3. `scripts/eval-agent-navigation.ts` + `scripts/eval-real-repo-navigation.ts` hinter eine gemeinsame Navigation-Eval-Module-Interface ziehen; Skripte bleiben nur Suite/CLI-Adapter.
      4. Script-Harness für wiederholtes CLI-Parsing, `timed`/`avg`/`p95`/Rundung und Gate-Report-Helfer extrahieren.

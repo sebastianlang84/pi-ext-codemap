@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.6.4 - 2026-05-25
+
+- Split eval diagnostics/report and pure query-plan/ranking contracts out of the large search test suite, shrinking the remaining monolith while keeping public CodeMap behavior unchanged.
+
 ## 0.6.3 - 2026-05-25
 
 - Split the pure search+context read-plan contracts out of the large search test suite so follow-up search/ranking/context refactors have a smaller public seam to change.

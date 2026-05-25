@@ -10,8 +10,6 @@ import { fixtureRepo, useIsolatedHome } from "./helpers/repo-fixture.ts";
 
 useIsolatedHome();
 
-const { explainNavigationMisses, summarizeNavigationMissReasons } = await import("../src/core/eval-navigation-diagnostics.ts");
-const { classifyMisses, summarizeMissTaxonomy } = await import("../src/core/eval-miss-taxonomy.ts");
 const { indexRepo, status } = await import("../src/core/indexer.ts");
 const { mergeSearchContextReadPlan } = await import("../src/core/navigation-read-plan.ts");
 const { planQuery } = await import("../src/core/query-plan.ts");
@@ -19,107 +17,6 @@ const { scoreSearchRow } = await import("../src/core/ranking.ts");
 const { searchCodeMap, searchCodeMapDebug, searchCodeMapWithDiagnostics } = await import("../src/core/search.ts");
 const { codemapContext } = await import("../src/core/context.ts");
 const { getRepoInfo } = await import("../src/core/repo.ts");
-
-test("real-repo eval navigation diagnostics explain entry-coupled context misses", () => {
-  const explanations = explainNavigationMisses({
-    mode: "codemap_search_context",
-    entry: "src/pi-extension/retrieval.ts",
-    requiredContext: ["test/pi-extension/retrieval.test.ts", "src/pi-extension/turn-intake.ts"],
-    missingExpectedFiles: ["src/pi-extension/retrieval.ts", "test/pi-extension/retrieval.test.ts"],
-    filesRead: ["src/pi-extension/tools.ts", "test/pi-extension/tools.test.ts"],
-    searchPaths: ["src/pi-extension/tools.ts", "src/pi-extension/retrieval.ts"],
-    contextTarget: "src/pi-extension/tools.ts",
-    readFirstPaths: ["src/pi-extension/tools.ts", "test/pi-extension/tools.test.ts"],
-  });
-
-  assert.deepEqual(explanations.map((item) => [item.file, item.reason]), [
-    ["src/pi-extension/retrieval.ts", "context_entry_miss"],
-    ["test/pi-extension/retrieval.test.ts", "context_neighbor_unreachable"],
-  ]);
-});
-
-test("real-repo eval summarizes navigation miss reasons", () => {
-  const targetMismatch = explainNavigationMisses({
-    mode: "codemap_search_context",
-    entry: "src/pi-extension/tools.ts",
-    requiredContext: ["src/pi-extension/tag-catalog.ts", "src/pi-extension/formatters.ts"],
-    missingExpectedFiles: ["src/pi-extension/tag-catalog.ts", "src/pi-extension/formatters.ts"],
-    filesRead: ["test/pi-extension/tools.test.ts", "src/pi-extension/tools.ts"],
-    searchPaths: ["test/pi-extension/tools.test.ts", "src/pi-extension/tools.ts", "src/pi-extension/tag-catalog.ts"],
-    contextTarget: "test/pi-extension/tools.test.ts",
-    readFirstPaths: ["test/pi-extension/tools.test.ts", "src/pi-extension/tools.ts"],
-  });
-  const relationshipGap = explainNavigationMisses({
-    mode: "codemap_search_context",
-    entry: "src/request.ts",
-    requiredContext: ["src/execution.ts"],
-    missingExpectedFiles: ["src/execution.ts"],
-    filesRead: ["src/request.ts", "tests/request.test.mjs"],
-    searchPaths: ["src/request.ts"],
-    contextTarget: "src/request.ts",
-    readFirstPaths: ["src/request.ts", "tests/request.test.mjs"],
-  });
-
-  const summary = summarizeNavigationMissReasons([...targetMismatch, ...relationshipGap]);
-
-  assert.equal(summary.total, 3);
-  assert.equal(summary.byReason.context_target_mismatch, 2);
-  assert.equal(summary.byReason.context_budget_or_relationship, 1);
-  assert.deepEqual(summary.examples.map((item) => item.reason), ["context_target_mismatch", "context_target_mismatch", "context_budget_or_relationship"]);
-});
-
-test("real-repo eval miss taxonomy classifies actionable misses", () => {
-  const misses = classifyMisses({
-    query: "registerMemoryTools empty result hints",
-    entry: "src/pi-extension/tools.ts",
-    requiredContext: ["test/pi-extension/tools.test.ts", "src/pi-extension/formatters.ts"],
-    missingExpectedFiles: ["test/pi-extension/tools.test.ts", "src/pi-extension/formatters.ts", "src/lib/series-analysis.ts"],
-    forbiddenRead: ["package-lock.json"],
-    indexStale: false,
-    hints: { "src/pi-extension/formatters.ts": "query_formulation", "src/lib/series-analysis.ts": "alias" },
-  });
-
-  assert.deepEqual(misses.map((item) => [item.kind, item.class, item.file]), [
-    ["forbidden_read", "noise", "package-lock.json"],
-    ["missing_expected", "convention", "test/pi-extension/tools.test.ts"],
-    ["missing_expected", "query_formulation", "src/pi-extension/formatters.ts"],
-    ["missing_expected", "alias", "src/lib/series-analysis.ts"],
-  ]);
-  const staleMiss = classifyMisses({
-    query: "registerMemoryTools empty result hints",
-    entry: "src/pi-extension/tools.ts",
-    requiredContext: ["src/lib/series-analysis.ts"],
-    missingExpectedFiles: ["src/lib/series-analysis.ts"],
-    forbiddenRead: [],
-    indexStale: true,
-    hints: { "src/lib/series-analysis.ts": "alias" },
-  });
-  assert.equal(staleMiss[0]?.class, "staleness");
-  const summary = summarizeMissTaxonomy(misses);
-  assert.equal(summary.total, 4);
-  assert.equal(summary.byClass.noise, 1);
-  assert.equal(summary.byClass.convention, 1);
-  assert.equal(summary.byClass.query_formulation, 1);
-  assert.equal(summary.byClass.alias, 1);
-});
-
-test("agent navigation eval report includes stable miss taxonomy summaries", () => {
-  const output = execFileSync(process.execPath, ["--experimental-strip-types", "scripts/eval-agent-navigation.ts", "--fixtures", "--limit", "1"], { encoding: "utf8" });
-  const parsed = JSON.parse(output);
-  const taxonomy = parsed.report.missTaxonomy;
-  assert.equal(typeof taxonomy.total, "number");
-  assert.deepEqual(Object.keys(taxonomy.byClass), ["alias", "convention", "missing_symbol", "noise", "staleness", "query_formulation", "unknown"]);
-  assert.ok(Array.isArray(taxonomy.examples));
-  assert.ok(taxonomy.total > 0);
-  assert.equal(typeof parsed.report.modes[0].avgExpectedRecall, "number");
-  assert.equal(typeof parsed.report.modes[0].missTaxonomy.byClass.unknown, "number");
-  assert.equal(typeof parsed.report.cases[0].expectedRecall, "number");
-  assert.ok(Array.isArray(parsed.report.cases[0].misses));
-  const searchContextCase = parsed.report.cases.find((item: { mode: string }) => item.mode === "codemap_search_context");
-  assert.ok(Array.isArray(searchContextCase.navigationDiagnostics.searchTop));
-  const missedSearchCase = parsed.report.cases.find((item: { mode: string; missingExpectedFiles: string[] }) => item.mode === "codemap_search" && item.missingExpectedFiles.length > 0);
-  assert.ok(Array.isArray(missedSearchCase.navigationDiagnostics.searchCandidates));
-});
 
 test("codemap context resolves TypeScript path aliases from tsconfig paths", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-alias-context-"));
@@ -214,14 +111,6 @@ test("symbol queries outrank broad implementation file chunks", (t) => {
   assert.equal(results[0]?.kind, "function");
 });
 
-test("generic implementation role intent does not imply main entrypoint intent", () => {
-  assert.deepEqual(planQuery("memory retrieval implementation").roleIntents, ["implementation"]);
-  assert.deepEqual(planQuery("where is the main implementation?").roleIntents, ["implementation", "implementation/main"]);
-  const longPlan = planQuery("buildTurnIntake implementation Use memory_search if prior context matters no relevant stored context");
-  assert.ok(longPlan.coreTerms.includes("relevant"), JSON.stringify(longPlan.coreTerms));
-  assert.ok(longPlan.coreTerms.includes("stored"), JSON.stringify(longPlan.coreTerms));
-});
-
 test("generic implementation search does not seed unrelated main entrypoints", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-generic-implementation-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -237,77 +126,6 @@ test("generic implementation search does not seed unrelated main entrypoints", (
 
   const mainResults = searchCodeMap({ cwd: root, query: "where is the main implementation?", limit: 5 });
   assert.equal(mainResults[0]?.path, "src/index.ts", JSON.stringify(mainResults));
-});
-
-test("implementation-intent ranking penalizes test-only matches", () => {
-  const plan = planQuery("registerMemoryTools implementation memory_search");
-  const sourceDiagnostics = scoreSearchRow({
-    path: "src/pi-extension/tools.ts",
-    language: "typescript",
-    startLine: 1,
-    endLine: 5,
-    kind: "function",
-    text: "export function registerMemoryTools() {}",
-    rank: -1,
-    size: 100,
-    symbolName: "registerMemoryTools",
-  }, plan, 4);
-  const testDiagnostics = scoreSearchRow({
-    path: "test/pi-extension/tools.test.ts",
-    language: "typescript",
-    startLine: 1,
-    endLine: 5,
-    kind: "method",
-    text: "registerMemoryTools memory_search implementation",
-    rank: -1,
-    size: 100,
-    symbolName: "registerMemoryTools",
-  }, plan, 4);
-
-  assert.ok(testDiagnostics.testPenalty > 0, JSON.stringify(testDiagnostics));
-  assert.ok(sourceDiagnostics.finalScore > testDiagnostics.finalScore, JSON.stringify({ sourceDiagnostics, testDiagnostics }));
-});
-
-test("non-agent queries penalize agent instruction files", () => {
-  const plan = planQuery("ast grep binary path should reject ambiguous sg shadow utils command and show install guidance");
-  const agentDiagnostics = scoreSearchRow({
-    path: "AGENTS.md",
-    language: "markdown",
-    startLine: 1,
-    endLine: 8,
-    kind: "heading",
-    text: "# ast-grep binary guidance\nsg process binary path ambiguous install guidance shadow utils command",
-    rank: -1,
-    size: 200,
-    symbolName: null,
-  }, plan, 4);
-  const sourceDiagnostics = scoreSearchRow({
-    path: "src/ast-grep/binary-path.ts",
-    language: "typescript",
-    startLine: 1,
-    endLine: 8,
-    kind: "function",
-    text: "export function resolveAstGrepBinary() { return validateCandidate('sg'); }",
-    rank: -1,
-    size: 200,
-    symbolName: "resolveAstGrepBinary",
-  }, plan, 4);
-  const agentPlan = planQuery("AGENTS.md");
-  const requestedAgentDiagnostics = scoreSearchRow({
-    path: "AGENTS.md",
-    language: "markdown",
-    startLine: 1,
-    endLine: 8,
-    kind: "heading",
-    text: "# Agent instructions",
-    rank: -1,
-    size: 200,
-    symbolName: null,
-  }, agentPlan, 4);
-
-  assert.equal(agentDiagnostics.noisePenalty, 18, JSON.stringify(agentDiagnostics));
-  assert.ok(sourceDiagnostics.finalScore > agentDiagnostics.finalScore, JSON.stringify({ sourceDiagnostics, agentDiagnostics }));
-  assert.equal(requestedAgentDiagnostics.noisePenalty, 0, JSON.stringify(requestedAgentDiagnostics));
 });
 
 test("natural binary change requests prefer source targets over agent instructions", (t) => {
@@ -863,35 +681,6 @@ export function DashboardClient() {
   }
 });
 
-test("natural identifier pairs keep compact code terms without prose compounds", () => {
-  const plan = planQuery("workbench chart interval and x range settings should survive reload from local storage");
-
-  assert.ok(plan.coreTerms.includes("xrange"), JSON.stringify(plan.coreTerms));
-  assert.ok(plan.coreTerms.includes("localstorage"), JSON.stringify(plan.coreTerms));
-  assert.ok(!plan.coreTerms.includes("shouldsurvive"), JSON.stringify(plan.coreTerms));
-});
-
-test("ordinary natural queries penalize local Claude settings", () => {
-  const naturalPlan = planQuery("workbench chart interval and x range settings should survive reload from local storage");
-  const pathPlan = planQuery(".claude/settings.local.json");
-  const claudePlan = planQuery("claude settings permissions");
-  const row = {
-    path: ".claude/settings.local.json",
-    language: "json",
-    startLine: 1,
-    endLine: 8,
-    kind: "text",
-    text: '{ "permissions": { "allow": ["Bash(curl:*)"] }, "spinnerTipsEnabled": true }',
-    rank: -1,
-    size: 120,
-    symbolName: null,
-  };
-
-  assert.equal(scoreSearchRow(row, naturalPlan, 4).noisePenalty, 18);
-  assert.equal(scoreSearchRow(row, pathPlan, 4).noisePenalty, 0);
-  assert.equal(scoreSearchRow(row, claudePlan, 4).noisePenalty, 0);
-});
-
 test("natural workbench session queries prefer source over local agent settings", (t) => {
   const root = mkdtempSync(join(tmpdir(), "pi-codemap-workbench-session-source-first-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -1234,33 +1023,6 @@ def send_telegram(text):
 
   const results = searchCodeMap({ cwd: root, query: "telegram delivery log host lock", limit: 5 });
   assert.equal(results[0]?.path, "src/newsletter_writer/delivery.py", JSON.stringify(results.map((result) => ({ path: result.path, score: result.score }))));
-});
-
-test("ranking gives exact module-name terms enough weight over sibling content matches", () => {
-  const plan = planQuery("telegram delivery log host lock");
-  const moduleDiagnostics = scoreSearchRow({
-    path: "src/newsletter_writer/delivery.py",
-    language: "python",
-    startLine: 1,
-    endLine: 1,
-    kind: "text",
-    text: "send telegram newsletter",
-    rank: 0,
-    symbolName: null,
-  }, plan, 1);
-  const siblingDiagnostics = scoreSearchRow({
-    path: "src/newsletter_writer/config.py",
-    language: "python",
-    startLine: 1,
-    endLine: 1,
-    kind: "text",
-    text: "telegram delivery log host lock settings",
-    rank: 0,
-    symbolName: null,
-  }, plan, 1);
-
-  assert.ok(moduleDiagnostics.filenameScore > siblingDiagnostics.filenameScore, JSON.stringify({ moduleDiagnostics, siblingDiagnostics }));
-  assert.ok(moduleDiagnostics.finalScore > siblingDiagnostics.finalScore, JSON.stringify({ moduleDiagnostics, siblingDiagnostics }));
 });
 
 test("multi-term queries prefer all-term matches over OR fallback", (t) => {
