@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.6.2 - 2026-05-25
+
+- Rename the repository test root from `test/` to `tests/`, update package/script/docs references, and keep checked-in eval fixtures discoverable under the new path.
+- Split storage/migration and Pi adapter contract coverage out of the large search test suite, adding shared temp repo/home test fixtures for follow-up refactors.
 - Add eval-only ranking/context debug traces with score components, selected/rejected search candidates, and read-plan budget decisions while keeping public search results compact.
 
 ## 0.6.1 - 2026-05-25
