@@ -20,8 +20,8 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
 ## Nächste sinnvolle Slices — vorgeschlagene Reihenfolge
 
 1. [ ] Test-/Script-Monolith Deepening: nächsten Refactor-Slice auswählen und umsetzen.
-   - Erledigt: `test/` heißt jetzt `tests/`; Storage-/Migration-Verträge liegen in `tests/storage.test.ts`, Pi-Adapter-Verträge in `tests/pi-extension.test.ts`, und gemeinsame Temp-Repo/Home-Fixtures in `tests/helpers/repo-fixture.ts`.
-   - Review-Befund: `tests/search.test.ts` (~2.3k Zeilen) mischt weiterhin Search/Ranking, Context/Read-Plan und Eval-Diagnostik; mehrere `scripts/*.ts` duplizieren Navigation-Eval-Modelle, CLI-Parsing, Gate-/Metriklogik und Fixture-/Repo-Setup.
+   - Erledigt: `test/` heißt jetzt `tests/`; Storage-/Migration-Verträge liegen in `tests/storage.test.ts`, Pi-Adapter-Verträge in `tests/pi-extension.test.ts`, gemeinsame Temp-Repo/Home-Fixtures liegen in `tests/helpers/repo-fixture.ts`, und die reinen Search+Context-Read-Plan-Verträge liegen in `tests/search-read-plan.test.ts`.
+   - Review-Befund: `tests/search.test.ts` (~2.1k Zeilen) mischt weiterhin Search/Ranking, integrierte Context/Read-Plan-Cases und Eval-Diagnostik; mehrere `scripts/*.ts` duplizieren Navigation-Eval-Modelle, CLI-Parsing, Gate-/Metriklogik und Fixture-/Repo-Setup.
    - Priorisierte Kandidaten:
      1. `tests/search.test.ts` weiter nach öffentlichem Seam splitten: Search/Ranking, Context/Read-Plan, Eval-Diagnostik.
      2. Weitere Test-Fixture-Helfer nur dort extrahieren, wo sie mehrere neue Suites vereinfachen; case-spezifische Inhalte inline lassen.

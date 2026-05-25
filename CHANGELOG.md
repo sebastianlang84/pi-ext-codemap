@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.6.3 - 2026-05-25
+
+- Split the pure search+context read-plan contracts out of the large search test suite so follow-up search/ranking/context refactors have a smaller public seam to change.
+
 ## 0.6.2 - 2026-05-25
 
 - Rename the repository test root from `test/` to `tests/`, update package/script/docs references, and keep checked-in eval fixtures discoverable under the new path.
