@@ -24,7 +24,7 @@
     "docs/developer/relationship-graph-plan.md",
     "docs/archive/brainstorming.md",
     "scripts/",
-    "test/",
+    "tests/",
     "TODO.md",
     "README.md",
     "CHANGELOG.md",
@@ -37,7 +37,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
     "verify": "npm run typecheck && npm test && npm run bench:search-quality:gate && npm run bench:context-quality:gate && npm run eval:agent-navigation:gate && npm run eval:real-repo-navigation:gate && npm run check:token-injection",
     "bench:search-quality": "node --experimental-strip-types scripts/bench-search-quality.ts --fixtures",
     "bench:search-quality:gate": "node --experimental-strip-types scripts/bench-search-quality.ts --quality-gate --fixtures",

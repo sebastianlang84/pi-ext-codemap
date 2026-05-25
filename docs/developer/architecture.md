@@ -37,7 +37,7 @@ pi-ext-codemap/
   src/
     core/
     pi-extension/
-  test/
+  tests/
   scripts/
   package.json
 ```

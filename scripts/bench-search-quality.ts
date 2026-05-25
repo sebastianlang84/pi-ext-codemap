@@ -67,7 +67,7 @@ const localRepoRoots = [
   "/home/wasti/dev/autoresearch",
 ];
 const fixtureRoots = [
-  fileURLToPath(new URL("../test/fixtures/search-quality/agent-nav", import.meta.url)),
+  fileURLToPath(new URL("../tests/fixtures/search-quality/agent-nav", import.meta.url)),
 ];
 const ignoredStructuralNames = new Set(["main", "run"]);
 const astGrepGroundTruthSpecs: AstGrepGroundTruthSpec[] = [

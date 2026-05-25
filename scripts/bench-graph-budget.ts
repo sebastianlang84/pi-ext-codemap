@@ -69,7 +69,7 @@ interface RepoReport {
   };
 }
 
-const fixtureRoots = [fileURLToPath(new URL("../test/fixtures/graph-budget", import.meta.url))];
+const fixtureRoots = [fileURLToPath(new URL("../tests/fixtures/graph-budget", import.meta.url))];
 const localRepoRoots = [
   "/home/wasti/macrolens",
   "/home/wasti/ai_stack/services/newsletter-writer",

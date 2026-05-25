@@ -260,7 +260,7 @@ Measured on 2026-05-23 with `npm run bench:graph-budget` and `npm run bench:grap
 
 | Corpus | Files | Graph edges | DB bytes | Cold index | Warm index | Graph rebuild | Context avg | Context p95 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `test/fixtures/graph-budget` | 10 | 6 | 106,496 | 24.285 ms | 12.268 ms | 12.080 ms | 19.556 ms | 26.045 ms |
+| `tests/fixtures/graph-budget` | 10 | 6 | 106,496 | 24.285 ms | 12.268 ms | 12.080 ms | 19.556 ms | 26.045 ms |
 | `/home/wasti/macrolens` | 106 | 27 | 2,789,376 | 126.367 ms | 21.041 ms | 32.630 ms | 29.824 ms | 49.280 ms |
 | `/home/wasti/ai_stack/services/newsletter-writer` | 29 | 25 | 1,740,800 | 86.584 ms | 19.206 ms | 26.302 ms | 28.604 ms | 31.312 ms |
 | `/home/wasti/dev/autoresearch` | 5 | 0 | 307,200 | 19.694 ms | 10.544 ms | 11.123 ms | 21.154 ms | 23.504 ms |
@@ -269,7 +269,7 @@ Budget decision: V1.5 remains acceptable for the measured fixture and local repo
 
 ## V1.5 context-quality gate
 
-`npm run bench:context-quality:gate` proves the relationship graph improves `codemap_context` outputs, not just that it fits the budget. The checked-in fixture is copied into a temporary clean Git repo so path-role heuristics are not contaminated by the repository's own `test/fixtures/` path.
+`npm run bench:context-quality:gate` proves the relationship graph improves `codemap_context` outputs, not just that it fits the budget. The checked-in fixture is copied into a temporary clean Git repo so path-role heuristics are not contaminated by the repository's own `tests/fixtures/` path.
 
 The gate currently covers:
 

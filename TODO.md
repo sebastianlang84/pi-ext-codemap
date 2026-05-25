@@ -19,11 +19,18 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
 
 ## Nächste sinnvolle Slices — vorgeschlagene Reihenfolge
 
-1. [ ] Architektur-Review für Test-/Script-Monolithen durchführen und Deepening-Slices ableiten.
-   - Dringend: `test/*.test.ts` und `scripts/*.ts` sind inzwischen teils riesige Monolithen; Review mit `improve-codebase-architecture` führen.
-   - Scope: erst Inventar nach Größe/Verantwortung, dann Kandidaten für tiefere Module/Seams benennen; keine breite Umstrukturierung ohne ausgewählten Slice.
-   - Ziel: bessere Locality und Leverage für Eval-/Bench-/Testlogik, kleinere testbare Interfaces, weniger Copy/Paste zwischen Agent-/Real-Repo-Evals.
-   - Verifikation: Review dokumentiert priorisierte Deepening-Kandidaten; erster Refactor-Slice erhält eigene Tests und hält `npm run typecheck`/`npm test` grün.
+1. [ ] Test-/Script-Monolith Deepening: nächsten Refactor-Slice auswählen und umsetzen.
+   - Erledigt: `test/` heißt jetzt `tests/`; Storage-/Migration-Verträge liegen in `tests/storage.test.ts`, Pi-Adapter-Verträge in `tests/pi-extension.test.ts`, und gemeinsame Temp-Repo/Home-Fixtures in `tests/helpers/repo-fixture.ts`.
+   - Review-Befund: `tests/search.test.ts` (~2.3k Zeilen) mischt weiterhin Search/Ranking, Context/Read-Plan und Eval-Diagnostik; mehrere `scripts/*.ts` duplizieren Navigation-Eval-Modelle, CLI-Parsing, Gate-/Metriklogik und Fixture-/Repo-Setup.
+   - Priorisierte Kandidaten:
+     1. `tests/search.test.ts` weiter nach öffentlichem Seam splitten: Search/Ranking, Context/Read-Plan, Eval-Diagnostik.
+     2. Weitere Test-Fixture-Helfer nur dort extrahieren, wo sie mehrere neue Suites vereinfachen; case-spezifische Inhalte inline lassen.
+     3. `scripts/eval-agent-navigation.ts` + `scripts/eval-real-repo-navigation.ts` hinter eine gemeinsame Navigation-Eval-Module-Interface ziehen; Skripte bleiben nur Suite/CLI-Adapter.
+     4. Script-Harness für wiederholtes CLI-Parsing, `timed`/`avg`/`p95`/Rundung und Gate-Report-Helfer extrahieren.
+     5. Inline Eval-/Benchmark-Cases in Daten-/Fixture-Module verschieben, damit Logik- und Corpus-Diffs getrennt bleiben.
+   - Namenskonvention: `test/` → `tests/` ist erledigt; weitere Splits sollen Package-/Doku-Referenzen synchron halten.
+   - Guardrail: `src/core/search-quality-metrics.ts`, `src/core/eval-miss-taxonomy.ts`, `src/core/eval-navigation-diagnostics.ts`, `src/core/navigation-read-plan.ts`, `src/core/context-builder.ts` und `src/core/relationships.ts` wiederverwenden; keine Pi/TUI-Adapter-Details in Core-Tests ziehen.
+   - Verifikation: pro Slice `npm run typecheck`/`npm test`; bei Script-Eval-Änderungen zusätzlich betroffene `bench:*`/`eval:*:gate` ausführen.
 
 2. [ ] Nächsten Expanded-Natural-Holdout-Fix-Slice nur bei neuem konkretem Miss auswählen.
    - Aktueller Release-Stand: Baseline und Natural-Holdout waren vor `0.5.3` voll grün; alte Miss-Listen nicht als aktive Defekte behandeln.

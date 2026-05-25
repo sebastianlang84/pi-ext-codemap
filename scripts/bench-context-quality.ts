@@ -84,7 +84,7 @@ interface ParsedArgs {
   iterations: number;
 }
 
-const fixtureRoot = fileURLToPath(new URL("../test/fixtures/context-quality", import.meta.url));
+const fixtureRoot = fileURLToPath(new URL("../tests/fixtures/context-quality", import.meta.url));
 const fixtureCases: ContextQualityCase[] = [
   {
     name: "js target includes direct imports, reverse test importer, config, and doc",

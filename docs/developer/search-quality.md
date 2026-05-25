@@ -38,7 +38,7 @@ Run the opt-in local real-repo tuning profile:
 npm run bench:search-quality:local
 ```
 
-The default and gate commands use checked-in fixtures under `test/fixtures/search-quality/`. They do not depend on private local repositories. `--local-repos` is the only mode that uses known local paths when present:
+The default and gate commands use checked-in fixtures under `tests/fixtures/search-quality/`. They do not depend on private local repositories. `--local-repos` is the only mode that uses known local paths when present:
 
 - `/home/wasti/macrolens`
 - `/home/wasti/ai_stack/services/newsletter-writer`
@@ -139,7 +139,7 @@ The current product contract is documented in [`../product/PRD.md#12-ranking-and
 - `codemap_context` should keep lockfile/generated/build/minified import or reverse-import neighbors out of `readFirst` while preserving useful related tests/docs.
 - Ranking diagnostics exist for maintainer/debug paths and eval reports, but public `codemap_search` results stay compact and do not expose explain fields.
 
-Relevant tests in `test/search.test.ts` include:
+Relevant tests in `tests/search.test.ts` include:
 
 - `lockfiles are indexed but only prominent for explicit lockfile queries`
 - `context read-first excludes noisy generated and lockfile neighbors`

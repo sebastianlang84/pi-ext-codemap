@@ -238,7 +238,7 @@ test("bench search-quality fixture gate uses checked-in fixtures", () => {
 
   assert.equal(report.gate.passed, true);
   assert.equal(report.reports.length, 1);
-  assert.ok(report.reports[0]?.root.endsWith("test/fixtures/search-quality/agent-nav"), report.reports[0]?.root);
+  assert.ok(report.reports[0]?.root.endsWith("tests/fixtures/search-quality/agent-nav"), report.reports[0]?.root);
   assert.ok(report.reports[0]?.natural.cases >= 9, JSON.stringify(report.reports[0]?.natural));
   assert.deepEqual(report.reports[0]?.natural.excludedHits, []);
 });

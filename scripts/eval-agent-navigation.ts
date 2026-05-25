@@ -141,7 +141,7 @@ interface ParsedArgs {
 
 type NavigationMode = "lexical" | "codemap_search" | "codemap_search_context";
 
-const fixtureRoot = fileURLToPath(new URL("../test/fixtures/context-quality", import.meta.url));
+const fixtureRoot = fileURLToPath(new URL("../tests/fixtures/context-quality", import.meta.url));
 const modes: NavigationMode[] = ["lexical", "codemap_search", "codemap_search_context"];
 const tasks: NavigationTask[] = [
   {
