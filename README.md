@@ -71,7 +71,7 @@ Implemented V1 capabilities:
 - search paths, chunks, and cheap symbols with SQLite FTS5;
 - return line-bounded snippets with ranking scores;
 - return read-first context for a file, symbol, feature, or query;
-- warn when the index is stale, including Git HEAD and dirty-working-tree drift in full status;
+- warn when the index is stale: Git HEAD drift detected automatically on every status call; dirty-working-tree drift in full status;
 - provide simple related test/doc/import/caller hints;
 - target another repo with `repoPath` / `--repo-path` without changing session cwd;
 - scope status, indexing, search, and context to a subtree with `pathPrefix`.

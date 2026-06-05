@@ -35,7 +35,7 @@ export function status(cwd = process.cwd(), options: { health?: "cheap" | "full"
   try {
     const counts = readIndexStatusCounts(db, pathPrefix);
     const base = { ...info, ...counts, readiness: counts.indexed ? "ready" : "not_indexed", health: healthMode, pathPrefix };
-    return { ...base, ...(healthMode === "cheap" ? cheapIndexHealth() : fullIndexHealth(db, info.root, pathPrefix)) };
+    return { ...base, ...(healthMode === "cheap" ? cheapIndexHealth(db, info.root, pathPrefix) : fullIndexHealth(db, info.root, pathPrefix)) };
   } finally {
     db.close();
   }

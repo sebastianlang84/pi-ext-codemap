@@ -1,5 +1,5 @@
 import { openRepoDb } from "./db.ts";
-import { readGitWorkingTreeStatus, type GitDirtyFile } from "./git-status.ts";
+import { readGitHead, readGitWorkingTreeStatus, type GitDirtyFile } from "./git-status.ts";
 import { scanRepo } from "./scanner.ts";
 
 export interface IndexStatusCounts {
@@ -41,8 +41,27 @@ export function readIndexStatusCounts(db: ReturnType<typeof openRepoDb>, pathPre
   return { indexed: files > 0, files, chunks, symbols, lastIndexedAt, indexedHead };
 }
 
-export function cheapIndexHealth(): IndexHealth {
-  return { stale: false, changed: 0, missing: 0, deleted: 0, currentHead: null, headChanged: false, dirty: false, dirtyFiles: [], warnings: [] };
+export function cheapIndexHealth(db: ReturnType<typeof openRepoDb>, root: string, pathPrefix = ""): IndexHealth {
+  const currentHead = readGitHead(root);
+  const indexedHead = readPathAwareMeta(db, "indexed_head", pathPrefix);
+  const headChanged = Boolean(indexedHead && currentHead && indexedHead !== currentHead);
+  const warnings: string[] = [];
+  let stale: boolean;
+  if (currentHead === null && indexedHead !== null) {
+    // HEAD became unreadable after the index was built against a real commit
+    stale = true;
+    warnings.push("Git HEAD unreadable — index may be stale.");
+  } else if (headChanged) {
+    stale = true;
+    warnings.push("Git HEAD changed since last index.");
+  } else if (currentHead !== null && indexedHead === null) {
+    // Repo has commits but was never indexed with a HEAD baseline
+    stale = true;
+    warnings.push("No indexed HEAD baseline — index may be stale.");
+  } else {
+    stale = false;
+  }
+  return { stale, changed: 0, missing: 0, deleted: 0, currentHead, headChanged, dirty: false, dirtyFiles: [], warnings };
 }
 
 export function fullIndexHealth(db: ReturnType<typeof openRepoDb>, root: string, pathPrefix = ""): IndexHealth {
