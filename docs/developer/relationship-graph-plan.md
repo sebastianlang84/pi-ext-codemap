@@ -282,6 +282,50 @@ The gate currently covers:
 
 Initial fixture result on 2026-05-23: 4/4 cases, target-first rate 1.0, mandatory neighbor recall@K 1.0, reason-kind recall 1.0, noise/forbidden/pathPrefix leak rate 0, avg context latency 21.037 ms, p95 25.091 ms.
 
+## Graphify smoke-test learnings and improvement plan
+
+A standalone Graphify smoke test on 2026-06-09 used `graphifyy 0.8.35` as an external comparison tool, not as a CodeMap dependency. The test deliberately stayed AST-only and local: `graphify extract ./src --out /tmp/graphify-codemap-smoke --no-cluster`, followed by `cluster-only --no-viz --no-label`. It produced 399 nodes and a clustered 871-edge graph for CodeMap's `src/` tree, with no LLM token cost; the useful evidence came from precise path/explain examples, not from the edge count alone. The isolated `uv tool` environment was about 276 MB, which is acceptable for prior-art experiments but too heavy for CodeMap's default lightweight footprint.
+
+Decision: keep Graphify as a standalone prior-art and comparison tool only. Do not add Graphify, `graphifyy`, or a Pi Graphify extension as a runtime, dev, or packaging dependency. Any adopted idea should be implemented with CodeMap's existing SQLite graph/index surfaces and proven by CodeMap's own evals.
+
+The following scores are qualitative smoke-test notes, not a repeatable benchmark. Manual comparison on three architecture-navigation questions scored CodeMap at roughly 8/9 and Graphify at roughly 7/9:
+
+| Question | CodeMap | Graphify | Takeaway |
+|---|---:|---:|---|
+| Core search/context modules | 2/3 | 2/3 | Graphify surfaced broad module inventory better; CodeMap returned more useful read-first chunks but let TODO/docs compete with module files. |
+| Indexing flow | 3/3 | 3/3 | Graphify's `path`/`explain` output made call hops obvious; CodeMap's direct context included docs/tests and exact reasons. |
+| Local reference relationships | 3/3 | 2/3 | CodeMap's graph-backed read-first context and relationship docs were stronger; Graphify sometimes reported shallow containment/import paths as if they were meaningful flow. |
+
+### Candidate follow-ups, gated by CodeMap evals
+
+1. **Graph-neighborhood explanation — implemented internally**
+   - Current surface: internal `graphNeighborhoodDiagnostics(db, targetPath, pathFilter, options)` helper only; no Pi tool or prompt-facing schema.
+   - Behavior: for a direct file target, return compact incoming/outgoing neighbors grouped by reason (`imports`, `reverse_imports`, `includes`, `reverse_includes`, `implementation_pair`). Symbol targets, callers, and callees stay future-gated until stable symbol-node identities exist.
+   - Guardrails: read-only, one-hop, capped per group, same path-prefix filtering and noisy-file exclusions as relationship context, no prompt-surface expansion.
+   - Verification: tests cover path-prefix safety, deterministic group order, capped output, import/reverse-import grouping, include grouping, and implementation-pair grouping.
+   - Remaining gate: exposing this as diagnostics on `codemap_context` or a new public command still requires product and token-injection review.
+
+2. **Relationship path query — implemented internally**
+   - Current surface: internal `pathBetweenTargets(db, a, b, options)` helper only; no public `codemap_path`.
+   - Behavior: shortest path over existing file graph edges and reverse edges; `maxHops` defaults to 2 and is capped. Symbol containment stays future-gated until stable symbol-node identities exist.
+   - Guardrails: reports edge kinds and evidence (`specifier`, line range when available); does not infer semantic causality from file containment alone.
+   - Verification: tests cover `operation -> core -> store`, max-hop cutoff, reverse-edge paths, and no-path cases.
+   - Remaining gate: public `codemap_path` only if repeated agent tasks benefit and a separate product/token-injection review accepts the surface.
+
+3. **Offline architecture report — implemented as developer-only script**
+   - Current surface: `npm run report:architecture -- [repoRoot] [--path-prefix <subtree>] [--limit <n>]`; reads an existing index and does not refresh/index.
+   - Behavior: emits high-degree files, bridge files, import cycles, weakly connected indexed files, and deterministic module clusters. Symbol-level report sections stay future-gated until stable symbol-node identities exist.
+   - Guardrails: no LLM naming, no persistent extra state, no indexing side effects, output lives outside normal tool-call context unless explicitly read.
+   - Verification: snapshot-style fixture test covers hotspots, bridges, cycles, weak files, and clusters.
+
+4. **Post-V1.5 broad architecture-query ranking improvement — still gated**
+   - Candidate surface: measured `codemap_search`/`codemap_context` ranking change only after a failing eval case exists; this remains outside V1.5 graph work and follows the search-integration rule above.
+   - Behavior goal: queries such as `core search context modules` should elevate module/entry files like `search.ts`, `search-pipeline.ts`, and `context-builder.ts` over TODO/docs noise while preserving useful architecture docs.
+   - Guardrails: no broad doc penalty that hides canonical docs; keep tests and TODOs visible only when the query asks for test/backlog/eval status; preserve CodeMap's agent-navigation identity before considering semantic/vector/graph-assisted ranking.
+   - Verification: add a fixed broad-architecture navigation case before tuning; compare MRR/recall/noise leaks and inspect regressions.
+
+Suggested next order: leave public explanation/path commands closed until agent tasks repeatedly need them. Treat broad-query ranking as an autoresearch/eval loop, not a speculative heuristic tweak.
+
 ## Milestones
 
 ### Milestone 0 — Plan and baseline measurements

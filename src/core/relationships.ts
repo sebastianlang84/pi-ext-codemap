@@ -37,12 +37,94 @@ export interface IndexedRelationships {
   implementationPairs: RelatedPath[];
 }
 
+export type GraphNeighborhoodGroupKind = "imports" | "reverse_imports" | "includes" | "reverse_includes" | "implementation_pair";
+
+export interface GraphNeighborhoodGroup {
+  kind: GraphNeighborhoodGroupKind;
+  neighbors: RelatedPath[];
+}
+
+export interface GraphNeighborhoodDiagnostics {
+  targetPath: string;
+  groups: GraphNeighborhoodGroup[];
+}
+
+export interface GraphNeighborhoodOptions {
+  limitPerGroup?: number;
+}
+
+export interface RelationshipPathOptions {
+  maxHops?: number;
+  pathFilter?: string;
+}
+
+export interface RelationshipPathStep {
+  fromPath: string;
+  toPath: string;
+  kind: "imports" | "reverse_imports" | "includes" | "reverse_includes";
+  specifier?: string;
+  lineStart?: number;
+  lineEnd?: number;
+}
+
+export interface RelationshipPathResult {
+  fromPath: string;
+  toPath: string;
+  steps: RelationshipPathStep[];
+}
+
 export function findIndexedRelationships(db: ReturnType<typeof openRepoDb>, targetPath: string, pathFilter: string): IndexedRelationships {
   return {
     imports: importedLocalPaths(db, targetPath, pathFilter),
     importers: importingLocalPaths(db, targetPath, pathFilter),
     implementationPairs: implementationPairPaths(db, targetPath, pathFilter),
   };
+}
+
+export function graphNeighborhoodDiagnostics(
+  db: ReturnType<typeof openRepoDb>,
+  targetPath: string,
+  pathFilter: string,
+  options: GraphNeighborhoodOptions = {},
+): GraphNeighborhoodDiagnostics {
+  const limitPerGroup = boundedLimit(options.limitPerGroup ?? 8, 1, 25);
+  return {
+    targetPath,
+    groups: [
+      { kind: "imports", neighbors: graphDependencyNeighbors(db, targetPath, pathFilter, "outgoing", "imports", limitPerGroup) },
+      { kind: "reverse_imports", neighbors: graphDependencyNeighbors(db, targetPath, pathFilter, "incoming", "imports", limitPerGroup) },
+      { kind: "includes", neighbors: graphDependencyNeighbors(db, targetPath, pathFilter, "outgoing", "includes", limitPerGroup) },
+      { kind: "reverse_includes", neighbors: graphDependencyNeighbors(db, targetPath, pathFilter, "incoming", "includes", limitPerGroup) },
+      { kind: "implementation_pair", neighbors: implementationPairPaths(db, targetPath, pathFilter).slice(0, limitPerGroup) },
+    ],
+  };
+}
+
+export function pathBetweenTargets(
+  db: ReturnType<typeof openRepoDb>,
+  fromPath: string,
+  toPath: string,
+  options: RelationshipPathOptions = {},
+): RelationshipPathResult | undefined {
+  if (fromPath === toPath) return { fromPath, toPath, steps: [] };
+  const maxHops = boundedLimit(options.maxHops ?? 2, 1, 4);
+  const pathFilter = options.pathFilter ?? "%";
+  const adjacency = graphAdjacency(db, pathFilter);
+  const queue: Array<{ path: string; steps: RelationshipPathStep[] }> = [{ path: fromPath, steps: [] }];
+  const seen = new Set<string>([fromPath]);
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || current.steps.length >= maxHops) continue;
+    for (const step of adjacency.get(current.path) ?? []) {
+      if (seen.has(step.toPath)) continue;
+      const steps = [...current.steps, step];
+      if (step.toPath === toPath) return { fromPath, toPath, steps };
+      seen.add(step.toPath);
+      queue.push({ path: step.toPath, steps });
+    }
+  }
+  return undefined;
 }
 
 export function mergeRelatedPaths(paths: RelatedPath[]): RelatedPath[] {
@@ -307,6 +389,97 @@ function isCodePath(path: string): boolean {
 }
 
 const routeTermNoise = new Set(["app", "api", "route", "handler", "src", "web", "lib", "server"]);
+
+function graphDependencyNeighbors(
+  db: ReturnType<typeof openRepoDb>,
+  targetPath: string,
+  pathFilter: string,
+  direction: "outgoing" | "incoming",
+  edgeKind: "imports" | "includes",
+  limit: number,
+): RelatedPath[] {
+  if (!hasGraphMetadata(db)) return [];
+
+  const rows = direction === "outgoing"
+    ? db.prepare(`
+      select source.path as sourcePath, target.path as targetPath, e.specifier
+      from graph_edges e
+      join graph_nodes source on source.id = e.from_node_id
+      join graph_nodes target on target.id = e.to_node_id
+      where source.path = ? and target.path like ? escape '\\' and e.kind = ?
+      order by coalesce(e.line_start, 2147483647), target.path, coalesce(e.specifier, '')
+    `).all(targetPath, pathFilter, edgeKind) as Array<{ sourcePath: string; targetPath: string; specifier?: string | null }>
+    : db.prepare(`
+      select source.path as sourcePath, target.path as targetPath, e.specifier
+      from graph_edges e
+      join graph_nodes source on source.id = e.from_node_id
+      join graph_nodes target on target.id = e.to_node_id
+      where target.path = ? and source.path like ? escape '\\' and e.kind = ?
+      order by source.path, coalesce(e.line_start, 2147483647), coalesce(e.specifier, '')
+    `).all(targetPath, pathFilter, edgeKind) as Array<{ sourcePath: string; targetPath: string; specifier?: string | null }>;
+
+  const reasonKind: CodeMapContextReasonKind = edgeKind === "includes"
+    ? direction === "outgoing" ? "include" : "reverse_include"
+    : direction === "outgoing" ? "import" : "reverse_import";
+  const label = edgeKind === "includes"
+    ? direction === "outgoing" ? "quoted local include" : "file includes target"
+    : direction === "outgoing" ? "local import" : "file imports target";
+  return mergeRelatedPaths(rows
+    .map((row): RelatedPath | undefined => {
+      const path = direction === "outgoing" ? row.targetPath : row.sourcePath;
+      if (path === targetPath || isNoisyIndexedPath(db, path)) return undefined;
+      return {
+        path,
+        reasons: [{ kind: reasonKind, label, sourcePath: row.sourcePath, targetPath: row.targetPath, specifier: row.specifier ?? undefined }],
+      };
+    })
+    .filter((path): path is RelatedPath => Boolean(path)))
+    .slice(0, limit);
+}
+
+function graphAdjacency(db: ReturnType<typeof openRepoDb>, pathFilter: string): Map<string, RelationshipPathStep[]> {
+  const rows = db.prepare(`
+    select e.kind, source.path as sourcePath, target.path as targetPath, e.specifier, e.line_start as lineStart, e.line_end as lineEnd
+    from graph_edges e
+    join graph_nodes source on source.id = e.from_node_id
+    join graph_nodes target on target.id = e.to_node_id
+    where source.path like ? escape '\\' and target.path like ? escape '\\' and e.kind in ('imports', 'includes')
+    order by source.path, target.path, e.kind, coalesce(e.line_start, 2147483647), coalesce(e.specifier, '')
+  `).all(pathFilter, pathFilter) as Array<{ kind: string; sourcePath: string; targetPath: string; specifier?: string; lineStart?: number | null; lineEnd?: number | null }>;
+  const adjacency = new Map<string, RelationshipPathStep[]>();
+  for (const row of rows) {
+    const forwardKind = row.kind === "includes" ? "includes" : "imports";
+    const reverseKind = row.kind === "includes" ? "reverse_includes" : "reverse_imports";
+    addPathStep(adjacency, {
+      fromPath: row.sourcePath,
+      toPath: row.targetPath,
+      kind: forwardKind,
+      specifier: row.specifier ?? undefined,
+      lineStart: row.lineStart ?? undefined,
+      lineEnd: row.lineEnd ?? undefined,
+    });
+    addPathStep(adjacency, {
+      fromPath: row.targetPath,
+      toPath: row.sourcePath,
+      kind: reverseKind,
+      specifier: row.specifier ?? undefined,
+      lineStart: row.lineStart ?? undefined,
+      lineEnd: row.lineEnd ?? undefined,
+    });
+  }
+  return adjacency;
+}
+
+function addPathStep(adjacency: Map<string, RelationshipPathStep[]>, step: RelationshipPathStep): void {
+  const steps = adjacency.get(step.fromPath) ?? [];
+  steps.push(step);
+  adjacency.set(step.fromPath, steps);
+}
+
+function boundedLimit(value: number, min: number, max: number): number {
+  const integer = Number.isFinite(value) ? Math.trunc(value) : min;
+  return Math.min(Math.max(integer, min), max);
+}
 
 function readIndexedSource(db: ReturnType<typeof openRepoDb>, path: string): { path: string; language: string; text: string } | undefined {
   const rows = db.prepare(`

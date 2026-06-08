@@ -22,10 +22,9 @@ export const codeMapOperationMetadataById = {
     commandName: "codemap-status",
     description: "Show CodeMap approval/index status for cwd or repoPath; full=true does a full file-level stale scan.",
     commandDescription: "Show CodeMap approval/index status; pass --repo-path and/or --full",
-    promptSnippet: "Check CodeMap approval/index readiness and stale state for cwd.",
+    promptSnippet: "Check CodeMap approval/index readiness and stale state.",
     promptGuidelines: [
-      "Use codemap_status before search/context when approval or index state is unknown. full=true only needed for file-level stale diagnostics — HEAD drift is detected automatically.",
-      "Use codemap_status full=true only for stale diagnostics.",
+      "Use codemap_status before search/context if approval or index state is unknown; full=true only for file-level stale scans.",
       "Use codemap_status pathPrefix for monorepos.",
     ],
     parameters: Type.Object({

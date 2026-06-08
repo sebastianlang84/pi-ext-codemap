@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.6.6 - 2026-06-09
+
+- Add internal graph-neighborhood diagnostics, an internal relationship path helper, and a developer-only architecture report script without adding public Pi tool schemas or Graphify dependencies.
 - Split internal search diagnostics contract tests out of the large search test suite without changing public CodeMap behavior.
 - Split context relationship and graph contract tests out of the large search test suite without changing public CodeMap behavior.
 

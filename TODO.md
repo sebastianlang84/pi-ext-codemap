@@ -46,6 +46,14 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Nutzen: TS/JS-Alias-Restgrenzen bleiben sichtbar, ohne Resolver-Komplexität auf Vorrat einzubauen.
    - Verifikation: ein Fixture oder Real-Repo-Case belegt den Miss und die Verbesserung; keine breite Alias-Heuristik ohne Qualitätsgewinn.
 
+5. [ ] Graphify-inspirierte Follow-ups nur nach internen Helpern und Gates weiterführen.
+   - Detailplan: [`docs/developer/relationship-graph-plan.md#graphify-smoke-test-learnings-and-improvement-plan`](docs/developer/relationship-graph-plan.md#graphify-smoke-test-learnings-and-improvement-plan).
+   - Implementierter Unterbau: interner `graphNeighborhoodDiagnostics(...)`, interner `pathBetweenTargets(...)`, Developer-only `npm run report:architecture`; Graphify bleibt separates Prior-Art-Tool und keine Dependency.
+   - **Public/API-Gate:** öffentliche Commands wie `codemap_explain`/`codemap_path` erst nach wiederholtem Agent-Nutzen, Produktentscheidung und Token-Injection-Budgetcheck.
+   - **Symbol-Gate:** Symbol-Ziele, callers/callees, Symbol-Containment und Symbol-Level-Reports erst nach separatem Slice für stabile Symbol-Identitäten.
+   - **Broad-Architecture-Query-Gate:** Ranking nur als Eval-/Autoresearch-Loop anfassen; zuerst festen failing Eval-Case definieren, z. B. `core search context modules`, mit erwarteten Module-Dateien (`search.ts`, `search-pipeline.ts`, `context-builder.ts`) vor TODO/docs noise.
+   - Guardrails: keine generelle Doc-Abwertung; canonical docs bleiben auffindbar; Tests/TODOs bleiben sichtbar, wenn Query sie verlangt; bestehende Natural-Holdout-/Search-Gates dürfen nicht regressieren.
+
 ## Parked / später
 
 1. [ ] Thin CLI Adapter über `src/core/` ergänzen.

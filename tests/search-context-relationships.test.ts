@@ -12,6 +12,8 @@ useIsolatedHome();
 
 const { indexRepo } = await import("../src/core/indexer.ts");
 const { codemapContext } = await import("../src/core/context.ts");
+const { openRepoDb } = await import("../src/core/db.ts");
+const { graphNeighborhoodDiagnostics, pathBetweenTargets } = await import("../src/core/relationships.ts");
 const { getRepoInfo } = await import("../src/core/repo.ts");
 
 test("context packages direct files with related tests and docs", (t) => {
@@ -285,6 +287,103 @@ test("reverse importer context uses graph edges when importer chunks are wiped",
   const result = codemapContext({ cwd: root, target: "src/core/validation.ts", limit: 3 });
 
   assert.ok(result.readFirst.map((item) => item.path).includes("src/core/user-service.ts"), JSON.stringify(result.readFirst));
+});
+
+test("graph neighborhood diagnostics group direct file neighbors without widening pathPrefix", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-graph-neighborhood-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "packages", "billing", "src"), { recursive: true });
+  mkdirSync(join(root, "packages", "shared"), { recursive: true });
+
+  const extraImports = Array.from({ length: 9 }, (_, index) => `import { helper${index} } from "./helper-${index}";`).join("\n");
+  writeFileSync(join(root, "packages", "billing", "src", "invoice-service.ts"), `
+${extraImports}
+import { createGateway } from "./gateway";
+import { sharedLogger } from "../../shared/logger";
+export const invoiceService = [createGateway, sharedLogger];
+`);
+  for (let index = 0; index < 9; index++) writeFileSync(join(root, "packages", "billing", "src", `helper-${index}.ts`), `export const helper${index} = true;\n`);
+  writeFileSync(join(root, "packages", "billing", "src", "gateway.ts"), "export function createGateway() { return true; }\n");
+  writeFileSync(join(root, "packages", "billing", "src", "include-target.h"), "int include_target();\n");
+  writeFileSync(join(root, "packages", "billing", "src", "consumer-a.ts"), "import { invoiceService } from './invoice-service';\nexport const a = invoiceService;\n");
+  writeFileSync(join(root, "packages", "billing", "src", "consumer-b.ts"), "import { invoiceService } from './invoice-service';\nexport const b = invoiceService;\n");
+  writeFileSync(join(root, "packages", "shared", "logger.ts"), "export const sharedLogger = true;\n");
+  indexRepo({ cwd: root, approve: true });
+
+  const db = openRepoDb(getRepoInfo(root).dbPath);
+  try {
+    db.prepare(`
+      insert into graph_edges(from_node_id, to_node_id, kind, source_file_id, extractor, line_start, line_end, specifier, evidence_key, created_at, updated_at)
+      select source.id, target.id, 'includes', source.file_id, 'test-fixture', 50, 50, './include-target', 'fixture:include-target', datetime('now'), datetime('now')
+      from graph_nodes source, graph_nodes target
+      where source.ref = 'file:packages/billing/src/invoice-service.ts' and target.ref = 'file:packages/billing/src/include-target.h'
+    `).run();
+    const result = graphNeighborhoodDiagnostics(db, "packages/billing/src/invoice-service.ts", "packages/billing%", { limitPerGroup: 1 });
+    const groups = new Map(result.groups.map((group) => [group.kind, group.neighbors]));
+
+    assert.deepEqual(result.groups.map((group) => group.kind), ["imports", "reverse_imports", "includes", "reverse_includes", "implementation_pair"]);
+    assert.deepEqual(groups.get("imports")?.map((item) => item.path), ["packages/billing/src/helper-0.ts"]);
+    assert.deepEqual(groups.get("imports")?.[0]?.reasons.map((reason) => reason.kind), ["import"]);
+    assert.deepEqual(groups.get("reverse_imports")?.map((item) => item.path), ["packages/billing/src/consumer-a.ts"]);
+    assert.deepEqual(groups.get("includes")?.map((item) => item.path), ["packages/billing/src/include-target.h"]);
+    assert.ok(!result.groups.flatMap((group) => group.neighbors).some((item) => item.path === "packages/shared/logger.ts"), JSON.stringify(result.groups));
+  } finally {
+    db.close();
+  }
+});
+
+test("graph neighborhood diagnostics expose includes and implementation pairs for direct files", (t) => {
+  const root = fixtureRepo(t);
+  mkdirSync(join(root, "src", "parser"), { recursive: true });
+  writeFileSync(join(root, "src", "parser", "parser.h"), "int parse_value();\n");
+  writeFileSync(join(root, "src", "parser", "parser.cpp"), `
+#include "parser.h"
+
+int parse_value() { return 1; }
+`);
+  writeFileSync(join(root, "src", "parser", "parser_test.cpp"), `
+#include "parser.h"
+
+int main() { return parse_value(); }
+`);
+  indexRepo({ cwd: root });
+
+  const db = openRepoDb(getRepoInfo(root).dbPath);
+  try {
+    const result = graphNeighborhoodDiagnostics(db, "src/parser/parser.cpp", "%");
+    const groups = new Map(result.groups.map((group) => [group.kind, group.neighbors]));
+
+    assert.deepEqual(groups.get("includes")?.map((item) => item.path), ["src/parser/parser.h"]);
+    assert.deepEqual(groups.get("implementation_pair")?.map((item) => item.path), ["src/parser/parser.h"]);
+    assert.deepEqual(groups.get("includes")?.[0]?.reasons.map((reason) => reason.kind), ["include"]);
+  } finally {
+    db.close();
+  }
+});
+
+test("internal relationship path helper finds capped graph paths with edge evidence", (t) => {
+  const root = fixtureRepo(t);
+  mkdirSync(join(root, "src", "core"), { recursive: true });
+  writeFileSync(join(root, "src", "operation.ts"), "import { runCore } from './core/index';\nexport const operation = runCore;\n");
+  writeFileSync(join(root, "src", "core", "index.ts"), "import { readStore } from './store';\nexport const runCore = readStore;\n");
+  writeFileSync(join(root, "src", "core", "store.ts"), "export function readStore() { return true; }\n");
+  writeFileSync(join(root, "src", "unreachable.ts"), "export const unreachable = true;\n");
+  indexRepo({ cwd: root });
+
+  const db = openRepoDb(getRepoInfo(root).dbPath);
+  try {
+    const path = pathBetweenTargets(db, "src/operation.ts", "src/core/store.ts");
+    assert.deepEqual(path?.steps.map((step) => [step.fromPath, step.kind, step.toPath, step.specifier]), [
+      ["src/operation.ts", "imports", "src/core/index.ts", "./core/index"],
+      ["src/core/index.ts", "imports", "src/core/store.ts", "./store"],
+    ]);
+    assert.deepEqual(pathBetweenTargets(db, "src/operation.ts", "src/core/store.ts", { maxHops: 1 }), undefined);
+    assert.deepEqual(pathBetweenTargets(db, "src/core/store.ts", "src/operation.ts")?.steps.map((step) => step.kind), ["reverse_imports", "reverse_imports"]);
+    assert.deepEqual(pathBetweenTargets(db, "src/operation.ts", "src/unreachable.ts"), undefined);
+  } finally {
+    db.close();
+  }
 });
 
 test("context resolves TypeScript relative .js specifiers to indexed .ts files", (t) => {
