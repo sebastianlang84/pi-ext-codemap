@@ -59,7 +59,11 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Token-Budget: `codemap_context` und Gesamtbudget sind nahe am Gate; neue Parameter, Guidelines oder öffentliche Tools nur mit `npm run check:token-injection` und expliziter Budgetentscheidung.
    - Verifikation: Doku-/Package-Änderungen mit `npm pack --dry-run --json`, `npm run audit:lightweight`, `npm run check:token-injection` prüfen.
 
-## Parked / später
+## Diskussionspunkte / offen
+
+1. [ ] **tool_result-Nudge: Codemap-Nutzung bei grep/rg/find fördern**
+   - Beobachtung: LLM-Agenten (inkl. Subagents) greifen konsistent zu `bash`/`grep`/`find` statt zu `codemap_search`/`codemap_context`, auch wenn ein Index vorhanden ist. `promptGuidelines` ändern das Verhalten nicht zuverlässig — sie konkurrieren als undifferenzierte Bullets im System-Prompt gegen starke Base-Model-Priors.
+   - Idee: `tool_result`-Hook in pi-ext-codemap: wenn `bash` mit `rg`/`grep`/`find` aufgerufen wird und ein frischer Codemap-Index für das cwd existiert, wird ans Tool-Result ein einzeiliger Hinweis angehängt: *„codemap ist für dieses Repo indexiert — für Navigations-Queries bevorzuge codemap_search statt grep/rg.
 
 1. [ ] Thin CLI Adapter über `src/core/` ergänzen.
    - Scope: kleiner CLI-Adapter, zuerst `status --json` und maximal ein Such-/Context-Befehl.
