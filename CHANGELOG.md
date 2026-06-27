@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Extract shared navigation-eval assessment and metric helpers into Pi-independent core so eval scripts can stay thinner adapters without changing CodeMap ranking/context behavior.
+- Split Natural-Navigation search+context fixtures out of the remaining large search test suite without changing public CodeMap behavior.
+- Split public search navigation ranking/noise fixtures out of the core search smoke suite without changing CodeMap behavior.
 - Render the CodeMap footer status as a self-contained pill (`[CodeMap ✓]` / `[CodeMap ✗]`) so it stays readable when Pi composes adjacent extension statuses with single spaces.
 
 ## 0.6.8 - 2026-06-09

@@ -3,14 +3,34 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { performance } from "node:perf_hooks";
 
 import { codemapContext } from "../src/core/context.ts";
 import { explainNavigationMisses, summarizeNavigationMissReasons, type NavigationMissExplanation, type NavigationMissReasonSummary } from "../src/core/eval-navigation-diagnostics.ts";
-import { classifyMisses, emptyClassCounts, summarizeMissTaxonomy, type MissClass, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
+import { summarizeMissTaxonomy, type MissClass, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
 import { indexRepo, status as indexStatus } from "../src/core/indexer.ts";
+import {
+  assessNavigationCase,
+  compactSearchCandidates,
+  deltaMetrics,
+  lexicalScore,
+  parseNonNegativeNumber,
+  parsePositiveInteger,
+  queryTerms,
+  roundMs,
+  roundRate,
+  scoreComponents,
+  stripScoreComponents,
+  summarizeModeMetrics,
+  timed,
+  uniqueSelections,
+  type BaseModeMetrics,
+  type DeltaMetrics,
+  type FileSelectionDiagnostic,
+  type NavigationMode,
+  type SearchCandidateSelectionDiagnostic,
+} from "../src/core/navigation-eval.ts";
 import { explainSearchContextReadPlan, mergeSearchContextReadPlan, type ReadPlanDiagnostics } from "../src/core/navigation-read-plan.ts";
-import { searchCodeMapDebug, type SearchCandidateDebugDiagnostic } from "../src/core/search.ts";
+import { searchCodeMapDebug } from "../src/core/search.ts";
 
 type TaskCohort = "baseline" | "natural_holdout";
 
@@ -57,44 +77,6 @@ interface CaseReport {
   latencyMs: number;
 }
 
-interface FileSelectionDiagnostic {
-  path: string;
-  source: "lexical" | "search" | "context";
-  rank: number;
-  score?: number;
-  kind?: string;
-  reasons?: string[];
-  scoreComponents?: ScoreComponentDiagnostics;
-}
-
-interface SearchCandidateSelectionDiagnostic {
-  path: string;
-  source: string;
-  rank?: number;
-  score: number;
-  decision: string;
-  kind: string;
-  scoreComponents: ScoreComponentDiagnostics;
-}
-
-interface ScoreComponentDiagnostics {
-  retrievalBoost: number;
-  ftsScore: number;
-  pathScore: number;
-  filenameScore: number;
-  exactTextScore: number;
-  symbolScore: number;
-  textCoverageScore: number;
-  tokenCoverage: number;
-  matchedTokens: string[];
-  codeIntentBoost: number;
-  roleBoost: number;
-  testPenalty: number;
-  docPenalty: number;
-  noisePenalty: number;
-  roles: string[];
-}
-
 interface NavigationDiagnostics {
   searchTop: FileSelectionDiagnostic[];
   searchCandidates?: SearchCandidateSelectionDiagnostic[];
@@ -114,19 +96,7 @@ interface NavigationResult {
   readPlanDebug?: ReadPlanDiagnostics;
 }
 
-interface ModeMetrics {
-  mode: NavigationMode;
-  tasks: number;
-  successRate: number;
-  entryHitRate: number;
-  avgExpectedRecall: number;
-  avgContextRecall: number;
-  avgFilesRead: number;
-  avgToolCalls: number;
-  forbiddenReadRate: number;
-  avgLatencyMs: number;
-  p95LatencyMs: number;
-  missTaxonomy: MissTaxonomySummary;
+interface ModeMetrics extends BaseModeMetrics {
   navigationMissReasons: NavigationMissReasonSummary;
 }
 
@@ -164,14 +134,6 @@ interface EvalReport {
   };
 }
 
-interface DeltaMetrics {
-  successRate: number;
-  avgExpectedRecall: number;
-  avgContextRecall: number;
-  avgFilesRead: number;
-  avgToolCalls: number;
-}
-
 interface ParsedArgs {
   gateEnabled: boolean;
   keepState: boolean;
@@ -185,8 +147,6 @@ interface ParsedArgs {
   minSuccessDeltaVsLexical: number;
   minContextRecallDeltaVsSearch: number;
 }
-
-type NavigationMode = "lexical" | "codemap_search" | "codemap_search_context";
 
 const modes: NavigationMode[] = ["lexical", "codemap_search", "codemap_search_context"];
 const taskCohorts: TaskCohort[] = ["baseline", "natural_holdout"];
@@ -518,25 +478,21 @@ function runSuite(suite: RealRepoSuite, options: ParsedArgs, stateDir: string): 
 function evaluateTask(options: { suite: RealRepoSuite; stateDir: string; mode: NavigationMode; task: RealRepoTask; limit: number; indexStale: boolean }): CaseReport {
   const { suite, stateDir, mode, task, limit, indexStale } = options;
   const [latencyMs, navigation] = timed(() => navigate({ root: suite.root, stateDir, mode, task, limit }));
-  const uniqueFilesRead = uniqueStrings(navigation.filesRead);
-  const found = new Set(uniqueFilesRead);
-  const expected = uniqueStrings([task.entry, ...task.requiredContext]);
-  const missingExpectedFiles = expected.filter((path) => !found.has(path));
-  const missingContext = task.requiredContext.filter((path) => !found.has(path));
-  const forbiddenRead = (task.forbidden ?? []).filter((path) => found.has(path));
-  const entryFound = found.has(task.entry);
-  const foundExpectedFiles = expected.length - missingExpectedFiles.length;
-  const foundContext = task.requiredContext.length - missingContext.length;
-  const contextRecall = rate(foundContext, task.requiredContext.length);
-  const misses = classifyMisses({
-    query: task.query,
-    entry: task.entry,
-    requiredContext: task.requiredContext,
+  const assessment = assessNavigationCase({ ...task, filesRead: navigation.filesRead, indexStale });
+  const {
+    uniqueFilesRead,
+    expectedFiles,
+    foundExpectedFiles,
+    expectedRecall,
     missingExpectedFiles,
+    entryFound,
+    requiredContext,
+    foundContext,
+    contextRecall,
     forbiddenRead,
-    indexStale,
-    hints: task.missHints,
-  });
+    misses,
+    success,
+  } = assessment;
   const includeDebugDetails = missingExpectedFiles.length > 0 || forbiddenRead.length > 0;
   const navigationDiagnostics: NavigationDiagnostics = {
     searchTop: includeDebugDetails ? navigation.searchTop : stripScoreComponents(navigation.searchTop),
@@ -566,19 +522,19 @@ function evaluateTask(options: { suite: RealRepoSuite; stateDir: string; mode: N
     query: task.query,
     pathPrefix: task.pathPrefix ?? "",
     entry: task.entry,
-    expectedFiles: expected.length,
+    expectedFiles,
     foundExpectedFiles,
-    expectedRecall: rate(foundExpectedFiles, expected.length),
+    expectedRecall,
     missingExpectedFiles,
     filesRead: uniqueFilesRead,
     entryFound,
-    requiredContext: task.requiredContext.length,
+    requiredContext,
     foundContext,
     contextRecall,
     forbiddenRead,
     misses,
     navigationDiagnostics,
-    success: entryFound && contextRecall === 1 && forbiddenRead.length === 0,
+    success,
     toolCalls: mode === "codemap_search_context" ? 2 : 1,
     latencyMs: roundMs(latencyMs),
   };
@@ -625,66 +581,17 @@ function navigate(options: { root: string; stateDir: string; mode: NavigationMod
   return { filesRead, searchTop, searchCandidates, contextTarget, readFirst, readPlanDebug };
 }
 
-function compactSearchCandidates(candidates: SearchCandidateDebugDiagnostic[], limit: number): SearchCandidateSelectionDiagnostic[] {
-  return candidates
-    .filter((candidate) => candidate.decision !== "non_positive_score")
-    .sort((left, right) => (left.selectedRank ?? Number.MAX_SAFE_INTEGER) - (right.selectedRank ?? Number.MAX_SAFE_INTEGER) || right.score - left.score || left.path.localeCompare(right.path))
-    .slice(0, Math.max(limit * 4, limit))
-    .map((candidate) => ({
-      path: candidate.path,
-      source: candidate.source,
-      rank: candidate.selectedRank,
-      score: roundRate(candidate.score),
-      decision: candidate.decision,
-      kind: candidate.kind,
-      scoreComponents: scoreComponents(candidate),
-    }));
-}
-
-function scoreComponents(candidate: SearchCandidateDebugDiagnostic): ScoreComponentDiagnostics {
-  return {
-    retrievalBoost: roundRate(candidate.scoreDiagnostics.retrievalBoost),
-    ftsScore: roundRate(candidate.scoreDiagnostics.ftsScore),
-    pathScore: roundRate(candidate.scoreDiagnostics.pathScore),
-    filenameScore: roundRate(candidate.scoreDiagnostics.filenameScore),
-    exactTextScore: roundRate(candidate.scoreDiagnostics.exactTextScore),
-    symbolScore: roundRate(candidate.scoreDiagnostics.symbolScore),
-    textCoverageScore: roundRate(candidate.scoreDiagnostics.textCoverageScore),
-    tokenCoverage: roundRate(candidate.scoreDiagnostics.tokenCoverage),
-    matchedTokens: candidate.scoreDiagnostics.matchedTokens,
-    codeIntentBoost: roundRate(candidate.scoreDiagnostics.codeIntentBoost),
-    roleBoost: roundRate(candidate.scoreDiagnostics.roleBoost),
-    testPenalty: roundRate(candidate.scoreDiagnostics.testPenalty),
-    docPenalty: roundRate(candidate.scoreDiagnostics.docPenalty),
-    noisePenalty: roundRate(candidate.scoreDiagnostics.noisePenalty),
-    roles: candidate.scoreDiagnostics.roles,
-  };
-}
-
-function stripScoreComponents(items: FileSelectionDiagnostic[]): FileSelectionDiagnostic[] {
-  return items.map(({ scoreComponents: _scoreComponents, ...item }) => item);
-}
-
-function uniqueSelections(items: FileSelectionDiagnostic[]): FileSelectionDiagnostic[] {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    if (seen.has(item.path)) return false;
-    seen.add(item.path);
-    return true;
-  });
-}
-
 function lexicalSearch(root: string, query: string, pathPrefix = "", limit: number): Array<{ path: string; score: number }> {
   const paths = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
     .split(/\r?\n/)
     .filter((path) => path && path.startsWith(pathPrefix));
-  const terms = queryTerms(query);
+  const terms = queryTerms(query, { normalize: true });
   return paths
     .map((path) => {
       const fullPath = join(root, path);
       if (!safeTextFile(fullPath)) return { path, score: 0 };
       const text = readFileSync(fullPath, "utf8");
-      return { path, score: lexicalScore(path, text, terms) };
+      return { path, score: lexicalScore(path, text, terms, { normalize: true }) };
     })
     .filter((hit) => hit.score > 0)
     .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
@@ -703,35 +610,10 @@ function safeTextFile(path: string): boolean {
   }
 }
 
-function lexicalScore(path: string, text: string, terms: string[]): number {
-  const normalizedPath = normalizeText(path);
-  const normalizedText = normalizeText(text);
-  let score = 0;
-  for (const term of terms) {
-    const pathMatches = countOccurrences(normalizedPath, term);
-    const textMatches = countOccurrences(normalizedText, term);
-    score += pathMatches * 4 + textMatches;
-  }
-  return score;
-}
-
 function metricsFor(mode: NavigationMode, cases: CaseReport[]): ModeMetrics {
-  const modeCases = cases.filter((item) => item.mode === mode);
-  const latencies = modeCases.map((item) => item.latencyMs);
   return {
-    mode,
-    tasks: modeCases.length,
-    successRate: rate(modeCases.filter((item) => item.success).length, modeCases.length),
-    entryHitRate: rate(modeCases.filter((item) => item.entryFound).length, modeCases.length),
-    avgExpectedRecall: roundRate(avg(modeCases.map((item) => item.expectedRecall))),
-    avgContextRecall: roundRate(avg(modeCases.map((item) => item.contextRecall))),
-    avgFilesRead: roundRate(avg(modeCases.map((item) => item.filesRead.length))),
-    avgToolCalls: roundRate(avg(modeCases.map((item) => item.toolCalls))),
-    forbiddenReadRate: rate(modeCases.filter((item) => item.forbiddenRead.length > 0).length, modeCases.length),
-    avgLatencyMs: roundMs(avg(latencies)),
-    p95LatencyMs: roundMs(p95(latencies)),
-    missTaxonomy: summarizeMissTaxonomy(modeCases.flatMap((item) => item.misses)),
-    navigationMissReasons: summarizeNavigationMissReasons(modeCases.flatMap((item) => item.navigationDiagnostics.missingExpected)),
+    ...summarizeModeMetrics(mode, cases),
+    navigationMissReasons: summarizeNavigationMissReasons(cases.filter((item) => item.mode === mode).flatMap((item) => item.navigationDiagnostics.missingExpected)),
   };
 }
 
@@ -792,76 +674,5 @@ function metric(metrics: ModeMetrics[], mode: NavigationMode): ModeMetrics {
 }
 
 function delta(left: ModeMetrics, right: ModeMetrics): DeltaMetrics {
-  return {
-    successRate: roundRate(left.successRate - right.successRate),
-    avgExpectedRecall: roundRate(left.avgExpectedRecall - right.avgExpectedRecall),
-    avgContextRecall: roundRate(left.avgContextRecall - right.avgContextRecall),
-    avgFilesRead: roundRate(left.avgFilesRead - right.avgFilesRead),
-    avgToolCalls: roundRate(left.avgToolCalls - right.avgToolCalls),
-  };
-}
-
-function queryTerms(query: string): string[] {
-  return uniqueStrings(normalizeText(query).split(/[^a-z0-9_]+/).filter((term) => term.length > 1));
-}
-
-function normalizeText(value: string): string {
-  return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().replace(/[-./]+/g, " ");
-}
-
-function countOccurrences(text: string, needle: string): number {
-  if (!needle) return 0;
-  let count = 0;
-  let index = text.indexOf(needle);
-  while (index >= 0) {
-    count++;
-    index = text.indexOf(needle, index + needle.length);
-  }
-  return count;
-}
-
-function parsePositiveInteger(name: string, value: string | undefined): number {
-  if (value === undefined || value.trim() === "") throw new Error(`${name} requires a positive integer`);
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${name} requires a positive integer`);
-  return parsed;
-}
-
-function parseNonNegativeNumber(name: string, value: string | undefined): number {
-  if (value === undefined || value.trim() === "") throw new Error(`${name} requires a number`);
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${name} requires a non-negative number`);
-  return parsed;
-}
-
-function timed<T>(fn: () => T): [number, T] {
-  const started = performance.now();
-  const result = fn();
-  return [performance.now() - started, result];
-}
-
-function rate(numerator: number, denominator: number): number {
-  return denominator === 0 ? 0 : roundRate(numerator / denominator);
-}
-
-function avg(values: number[]): number {
-  return values.length === 0 ? 0 : values.reduce((total, value) => total + value, 0) / values.length;
-}
-
-function p95(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)];
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values)];
-}
-
-function roundRate(value: number): number {
-  return Math.round(value * 1000) / 1000;
-}
-
-function roundMs(value: number): number {
-  return Math.round(value * 1000) / 1000;
+  return deltaMetrics(left, right);
 }

@@ -3,14 +3,32 @@ import { execFileSync } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { codemapContext } from "../src/core/context.ts";
-import { classifyMisses, summarizeMissTaxonomy, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
+import { summarizeMissTaxonomy, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
 import { indexRepo } from "../src/core/indexer.ts";
+import {
+  assessNavigationCase,
+  compactSearchCandidates,
+  lexicalScore,
+  parseNonNegativeNumber,
+  parsePositiveInteger,
+  queryTerms,
+  roundMs,
+  roundRate,
+  scoreComponents,
+  stripScoreComponents,
+  summarizeModeMetrics,
+  timed,
+  uniqueSelections,
+  type BaseModeMetrics,
+  type FileSelectionDiagnostic,
+  type NavigationMode,
+  type SearchCandidateSelectionDiagnostic,
+} from "../src/core/navigation-eval.ts";
 import { explainSearchContextReadPlan, mergeSearchContextReadPlan, type ReadPlanDiagnostics } from "../src/core/navigation-read-plan.ts";
-import { searchCodeMapDebug, type SearchCandidateDebugDiagnostic } from "../src/core/search.ts";
+import { searchCodeMapDebug } from "../src/core/search.ts";
 
 interface NavigationTask {
   name: string;
@@ -45,44 +63,6 @@ interface NavigationCaseReport {
   latencyMs: number;
 }
 
-interface FileSelectionDiagnostic {
-  path: string;
-  source: "lexical" | "search" | "context";
-  rank: number;
-  score?: number;
-  kind?: string;
-  reasons?: string[];
-  scoreComponents?: ScoreComponentDiagnostics;
-}
-
-interface SearchCandidateSelectionDiagnostic {
-  path: string;
-  source: string;
-  rank?: number;
-  score: number;
-  decision: string;
-  kind: string;
-  scoreComponents: ScoreComponentDiagnostics;
-}
-
-interface ScoreComponentDiagnostics {
-  retrievalBoost: number;
-  ftsScore: number;
-  pathScore: number;
-  filenameScore: number;
-  exactTextScore: number;
-  symbolScore: number;
-  textCoverageScore: number;
-  tokenCoverage: number;
-  matchedTokens: string[];
-  codeIntentBoost: number;
-  roleBoost: number;
-  testPenalty: number;
-  docPenalty: number;
-  noisePenalty: number;
-  roles: string[];
-}
-
 interface NavigationDiagnostics {
   searchTop: FileSelectionDiagnostic[];
   searchCandidates?: SearchCandidateSelectionDiagnostic[];
@@ -101,20 +81,7 @@ interface NavigationResult {
   readPlanDebug?: ReadPlanDiagnostics;
 }
 
-interface ModeMetrics {
-  mode: NavigationMode;
-  tasks: number;
-  successRate: number;
-  entryHitRate: number;
-  avgExpectedRecall: number;
-  avgContextRecall: number;
-  avgFilesRead: number;
-  avgToolCalls: number;
-  forbiddenReadRate: number;
-  avgLatencyMs: number;
-  p95LatencyMs: number;
-  missTaxonomy: MissTaxonomySummary;
-}
+type ModeMetrics = BaseModeMetrics;
 
 interface EvalReport {
   root: string;
@@ -254,24 +221,22 @@ function prepareFixtureRepo(stateDir: string): string {
 function evaluateTask(options: { root: string; stateDir: string; mode: NavigationMode; task: NavigationTask; limit: number }): NavigationCaseReport {
   const { root, stateDir, mode, task, limit } = options;
   const [latencyMs, navigation] = timed(() => navigate({ root, stateDir, mode, task, limit }));
-  const uniqueFilesRead = uniqueStrings(navigation.filesRead);
-  const found = new Set(uniqueFilesRead);
-  const expected = uniqueStrings([task.entry, ...task.requiredContext]);
-  const missingExpectedFiles = expected.filter((path) => !found.has(path));
-  const missingContext = task.requiredContext.filter((path) => !found.has(path));
-  const forbiddenRead = (task.forbidden ?? []).filter((path) => found.has(path));
-  const entryFound = found.has(task.entry);
-  const foundExpectedFiles = expected.length - missingExpectedFiles.length;
-  const foundContext = task.requiredContext.length - missingContext.length;
-  const contextRecall = rate(foundContext, task.requiredContext.length);
-  const misses = classifyMisses({
-    query: task.query,
-    entry: task.entry,
-    requiredContext: task.requiredContext,
+  const assessment = assessNavigationCase({ ...task, filesRead: navigation.filesRead, emptyRecall: 1 });
+  const {
+    uniqueFilesRead,
+    expectedFiles,
+    foundExpectedFiles,
+    expectedRecall,
     missingExpectedFiles,
+    entryFound,
+    requiredContext,
+    foundContext,
+    missingContext,
+    contextRecall,
     forbiddenRead,
-    indexStale: false,
-  });
+    misses,
+    success,
+  } = assessment;
   const includeDebugDetails = missingExpectedFiles.length > 0 || forbiddenRead.length > 0;
   return {
     task: task.name,
@@ -279,13 +244,13 @@ function evaluateTask(options: { root: string; stateDir: string; mode: Navigatio
     query: task.query,
     pathPrefix: task.pathPrefix ?? "",
     entry: task.entry,
-    expectedFiles: expected.length,
+    expectedFiles,
     foundExpectedFiles,
-    expectedRecall: rate(foundExpectedFiles, expected.length),
+    expectedRecall,
     missingExpectedFiles,
     filesRead: uniqueFilesRead,
     entryFound,
-    requiredContext: task.requiredContext.length,
+    requiredContext,
     foundContext,
     missingContext,
     contextRecall,
@@ -299,7 +264,7 @@ function evaluateTask(options: { root: string; stateDir: string; mode: Navigatio
       readPlan: uniqueFilesRead,
       readPlanDebug: includeDebugDetails ? navigation.readPlanDebug : undefined,
     },
-    success: entryFound && contextRecall === 1 && forbiddenRead.length === 0,
+    success,
     toolCalls: mode === "codemap_search_context" ? 2 : 1,
     latencyMs: roundMs(latencyMs),
   };
@@ -346,55 +311,6 @@ function navigate(options: { root: string; stateDir: string; mode: NavigationMod
   return { filesRead, searchTop, searchCandidates, contextTarget, readFirst, readPlanDebug };
 }
 
-function stripScoreComponents(items: FileSelectionDiagnostic[]): FileSelectionDiagnostic[] {
-  return items.map(({ scoreComponents: _scoreComponents, ...item }) => item);
-}
-
-function uniqueSelections(items: FileSelectionDiagnostic[]): FileSelectionDiagnostic[] {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    if (seen.has(item.path)) return false;
-    seen.add(item.path);
-    return true;
-  });
-}
-
-function compactSearchCandidates(candidates: SearchCandidateDebugDiagnostic[], limit: number): SearchCandidateSelectionDiagnostic[] {
-  return candidates
-    .filter((candidate) => candidate.decision !== "non_positive_score")
-    .sort((left, right) => (left.selectedRank ?? Number.MAX_SAFE_INTEGER) - (right.selectedRank ?? Number.MAX_SAFE_INTEGER) || right.score - left.score || left.path.localeCompare(right.path))
-    .slice(0, Math.max(limit * 4, limit))
-    .map((candidate) => ({
-      path: candidate.path,
-      source: candidate.source,
-      rank: candidate.selectedRank,
-      score: roundRate(candidate.score),
-      decision: candidate.decision,
-      kind: candidate.kind,
-      scoreComponents: scoreComponents(candidate),
-    }));
-}
-
-function scoreComponents(candidate: SearchCandidateDebugDiagnostic): ScoreComponentDiagnostics {
-  return {
-    retrievalBoost: roundRate(candidate.scoreDiagnostics.retrievalBoost),
-    ftsScore: roundRate(candidate.scoreDiagnostics.ftsScore),
-    pathScore: roundRate(candidate.scoreDiagnostics.pathScore),
-    filenameScore: roundRate(candidate.scoreDiagnostics.filenameScore),
-    exactTextScore: roundRate(candidate.scoreDiagnostics.exactTextScore),
-    symbolScore: roundRate(candidate.scoreDiagnostics.symbolScore),
-    textCoverageScore: roundRate(candidate.scoreDiagnostics.textCoverageScore),
-    tokenCoverage: roundRate(candidate.scoreDiagnostics.tokenCoverage),
-    matchedTokens: candidate.scoreDiagnostics.matchedTokens,
-    codeIntentBoost: roundRate(candidate.scoreDiagnostics.codeIntentBoost),
-    roleBoost: roundRate(candidate.scoreDiagnostics.roleBoost),
-    testPenalty: roundRate(candidate.scoreDiagnostics.testPenalty),
-    docPenalty: roundRate(candidate.scoreDiagnostics.docPenalty),
-    noisePenalty: roundRate(candidate.scoreDiagnostics.noisePenalty),
-    roles: candidate.scoreDiagnostics.roles,
-  };
-}
-
 function lexicalSearch(root: string, query: string, pathPrefix = "", limit: number): Array<{ path: string; score: number }> {
   const paths = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
     .split(/\r?\n/)
@@ -410,34 +326,8 @@ function lexicalSearch(root: string, query: string, pathPrefix = "", limit: numb
     .slice(0, limit);
 }
 
-function lexicalScore(path: string, text: string, terms: string[]): number {
-  const haystacks = [path.toLowerCase(), text.toLowerCase()];
-  let score = 0;
-  for (const term of terms) {
-    const pathMatches = countOccurrences(haystacks[0], term);
-    const textMatches = countOccurrences(haystacks[1], term);
-    score += pathMatches * 4 + textMatches;
-  }
-  return score;
-}
-
 function metricsFor(mode: NavigationMode, cases: NavigationCaseReport[]): ModeMetrics {
-  const modeCases = cases.filter((item) => item.mode === mode);
-  const latencies = modeCases.map((item) => item.latencyMs);
-  return {
-    mode,
-    tasks: modeCases.length,
-    successRate: rate(modeCases.filter((item) => item.success).length, modeCases.length),
-    entryHitRate: rate(modeCases.filter((item) => item.entryFound).length, modeCases.length),
-    avgExpectedRecall: roundRate(avg(modeCases.map((item) => item.expectedRecall))),
-    avgContextRecall: roundRate(avg(modeCases.map((item) => item.contextRecall))),
-    avgFilesRead: roundRate(avg(modeCases.map((item) => item.filesRead.length))),
-    avgToolCalls: roundRate(avg(modeCases.map((item) => item.toolCalls))),
-    forbiddenReadRate: rate(modeCases.filter((item) => item.forbiddenRead.length > 0).length, modeCases.length),
-    avgLatencyMs: roundMs(avg(latencies)),
-    p95LatencyMs: roundMs(p95(latencies)),
-    missTaxonomy: summarizeMissTaxonomy(modeCases.flatMap((item) => item.misses)),
-  };
+  return summarizeModeMetrics(mode, cases, { emptyRate: 1 });
 }
 
 function evaluateGate(report: EvalReport, maxP95LatencyMs: number): { passed: boolean; issues: GateIssue[] } {
@@ -462,65 +352,4 @@ function metric(report: EvalReport, mode: NavigationMode): ModeMetrics {
   const found = report.modes.find((item) => item.mode === mode);
   if (!found) throw new Error(`Missing mode metrics for ${mode}`);
   return found;
-}
-
-function queryTerms(query: string): string[] {
-  return uniqueStrings(query.toLowerCase().split(/[^a-z0-9_]+/).filter((term) => term.length > 1));
-}
-
-function countOccurrences(text: string, needle: string): number {
-  if (!needle) return 0;
-  let count = 0;
-  let index = text.indexOf(needle);
-  while (index >= 0) {
-    count++;
-    index = text.indexOf(needle, index + needle.length);
-  }
-  return count;
-}
-
-function parsePositiveInteger(name: string, value: string | undefined): number {
-  if (value === undefined || value.trim() === "") throw new Error(`${name} requires a positive integer`);
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${name} requires a positive integer`);
-  return parsed;
-}
-
-function parseNonNegativeNumber(name: string, value: string | undefined): number {
-  if (value === undefined || value.trim() === "") throw new Error(`${name} requires a number`);
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${name} requires a non-negative number`);
-  return parsed;
-}
-
-function timed<T>(fn: () => T): [number, T] {
-  const started = performance.now();
-  const result = fn();
-  return [performance.now() - started, result];
-}
-
-function rate(numerator: number, denominator: number): number {
-  return denominator === 0 ? 1 : roundRate(numerator / denominator);
-}
-
-function avg(values: number[]): number {
-  return values.length === 0 ? 0 : values.reduce((total, value) => total + value, 0) / values.length;
-}
-
-function p95(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)];
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values)];
-}
-
-function roundRate(value: number): number {
-  return Math.round(value * 1000) / 1000;
-}
-
-function roundMs(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }
