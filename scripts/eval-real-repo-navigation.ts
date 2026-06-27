@@ -4,33 +4,28 @@ import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import { codemapContext } from "../src/core/context.ts";
 import { explainNavigationMisses, summarizeNavigationMissReasons, type NavigationMissExplanation, type NavigationMissReasonSummary } from "../src/core/eval-navigation-diagnostics.ts";
 import { summarizeMissTaxonomy, type MissClass, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
 import { indexRepo, status as indexStatus } from "../src/core/indexer.ts";
 import {
   assessNavigationCase,
-  compactSearchCandidates,
   deltaMetrics,
   lexicalScore,
+  navigateForNavigationEval,
   parseNonNegativeNumber,
   parsePositiveInteger,
   queryTerms,
   roundMs,
-  roundRate,
-  scoreComponents,
   stripScoreComponents,
   summarizeModeMetrics,
   timed,
-  uniqueSelections,
   type BaseModeMetrics,
   type DeltaMetrics,
   type FileSelectionDiagnostic,
+  type NavigationEvalLookupResult,
   type NavigationMode,
   type SearchCandidateSelectionDiagnostic,
 } from "../src/core/navigation-eval.ts";
-import { explainSearchContextReadPlan, mergeSearchContextReadPlan, type ReadPlanDiagnostics } from "../src/core/navigation-read-plan.ts";
-import { searchCodeMapDebug } from "../src/core/search.ts";
 
 type TaskCohort = "baseline" | "natural_holdout";
 
@@ -83,17 +78,8 @@ interface NavigationDiagnostics {
   contextTarget?: string;
   readFirst?: FileSelectionDiagnostic[];
   readPlan?: string[];
-  readPlanDebug?: ReadPlanDiagnostics;
+  readPlanDebug?: NavigationEvalLookupResult["readPlanDebug"];
   missingExpected: NavigationMissExplanation[];
-}
-
-interface NavigationResult {
-  filesRead: string[];
-  searchTop: FileSelectionDiagnostic[];
-  searchCandidates?: SearchCandidateSelectionDiagnostic[];
-  contextTarget?: string;
-  readFirst?: FileSelectionDiagnostic[];
-  readPlanDebug?: ReadPlanDiagnostics;
 }
 
 interface ModeMetrics extends BaseModeMetrics {
@@ -540,45 +526,9 @@ function evaluateTask(options: { suite: RealRepoSuite; stateDir: string; mode: N
   };
 }
 
-function navigate(options: { root: string; stateDir: string; mode: NavigationMode; task: RealRepoTask; limit: number }): NavigationResult {
+function navigate(options: { root: string; stateDir: string; mode: NavigationMode; task: RealRepoTask; limit: number }): NavigationEvalLookupResult {
   const { root, stateDir, mode, task, limit } = options;
-  if (mode === "lexical") {
-    const hits = lexicalSearch(root, task.query, task.pathPrefix, limit);
-    return {
-      filesRead: hits.map((hit) => hit.path),
-      searchTop: uniqueSelections(hits.map((hit, index) => ({ path: hit.path, source: "lexical", rank: index + 1, score: hit.score }))),
-    };
-  }
-  const searchDebug = searchCodeMapDebug({ cwd: root, query: task.query, pathPrefix: task.pathPrefix, stateDir, limit });
-  const searchResults = searchDebug.results;
-  const searchPaths = searchResults.map((result) => result.path);
-  const searchCandidateBySelectedRank = new Map(searchDebug.candidates.filter((candidate) => candidate.selectedRank !== undefined).map((candidate) => [candidate.selectedRank, candidate]));
-  const searchTop: FileSelectionDiagnostic[] = uniqueSelections(searchResults.map((result, index) => {
-    const candidate = searchCandidateBySelectedRank.get(index + 1);
-    return {
-      path: result.path,
-      source: "search",
-      rank: index + 1,
-      score: roundRate(result.score),
-      kind: result.kind,
-      scoreComponents: candidate ? scoreComponents(candidate) : undefined,
-    };
-  }));
-  const searchCandidates = compactSearchCandidates(searchDebug.candidates, limit);
-  if (mode === "codemap_search") return { filesRead: searchPaths, searchTop, searchCandidates };
-  const contextTarget = searchPaths[0] ?? task.query;
-  const context = codemapContext({ cwd: root, target: contextTarget, pathPrefix: task.pathPrefix, stateDir, limit });
-  const readFirst: FileSelectionDiagnostic[] = uniqueSelections(context.readFirst.map((item, index) => ({
-    path: item.path,
-    source: "context",
-    rank: index + 1,
-    score: "score" in item ? roundRate(item.score) : undefined,
-    kind: item.kind,
-    reasons: item.reasons?.map((reason) => reason.kind),
-  })));
-  const filesRead = mergeSearchContextReadPlan(searchPaths, context.readFirst, limit);
-  const readPlanDebug = explainSearchContextReadPlan(searchPaths, context.readFirst, limit);
-  return { filesRead, searchTop, searchCandidates, contextTarget, readFirst, readPlanDebug };
+  return navigateForNavigationEval({ root, stateDir, mode, query: task.query, pathPrefix: task.pathPrefix, limit, lexicalSearch });
 }
 
 function lexicalSearch(root: string, query: string, pathPrefix = "", limit: number): Array<{ path: string; score: number }> {

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   assessNavigationCase,
   deltaMetrics,
+  navigateForNavigationEval,
   queryTerms,
   summarizeModeMetrics,
   type BaseNavigationCaseMetrics,
@@ -89,4 +90,23 @@ test("navigation eval summarizes mode metrics and deltas with stable rounding", 
 test("navigation eval query terms can preserve legacy terms or normalize code paths", () => {
   assert.deepEqual(queryTerms("buildWorkbenchBacktestTargets implementation"), ["buildworkbenchbacktesttargets", "implementation"]);
   assert.deepEqual(queryTerms("src/pi-extension/audit.ts", { normalize: true }), ["src", "pi", "extension", "audit", "ts"]);
+});
+
+test("navigation eval lookup keeps lexical scoring adapter-owned", () => {
+  const result = navigateForNavigationEval({
+    root: "/repo",
+    mode: "lexical",
+    query: "needle",
+    limit: 2,
+    lexicalSearch: (root, query, pathPrefix, limit) => [
+      { path: `${root}:${query}:${pathPrefix ?? ""}:${limit}:a.ts`, score: 3 },
+      { path: "b.ts", score: 1 },
+    ],
+  });
+
+  assert.deepEqual(result.filesRead, ["/repo:needle::2:a.ts", "b.ts"]);
+  assert.deepEqual(result.searchTop.map((item) => [item.path, item.source, item.rank, item.score]), [
+    ["/repo:needle::2:a.ts", "lexical", 1, 3],
+    ["b.ts", "lexical", 2, 1],
+  ]);
 });

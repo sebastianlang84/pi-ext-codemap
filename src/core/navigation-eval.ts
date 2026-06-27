@@ -1,7 +1,9 @@
 import { performance } from "node:perf_hooks";
 
+import { codemapContext } from "./context.ts";
 import { classifyMisses, summarizeMissTaxonomy, type MissClass, type MissDiagnostic, type MissTaxonomySummary } from "./eval-miss-taxonomy.ts";
-import type { SearchCandidateDebugDiagnostic } from "./search.ts";
+import { explainSearchContextReadPlan, mergeSearchContextReadPlan, type ReadPlanDiagnostics } from "./navigation-read-plan.ts";
+import { searchCodeMapDebug, type SearchCandidateDebugDiagnostic } from "./search.ts";
 
 export type NavigationMode = "lexical" | "codemap_search" | "codemap_search_context";
 
@@ -41,6 +43,30 @@ export interface SearchCandidateSelectionDiagnostic {
   decision: string;
   kind: string;
   scoreComponents: ScoreComponentDiagnostics;
+}
+
+export interface LexicalSearchHit {
+  path: string;
+  score: number;
+}
+
+export interface NavigationEvalLookupOptions {
+  root: string;
+  stateDir?: string;
+  mode: NavigationMode;
+  query: string;
+  pathPrefix?: string;
+  limit: number;
+  lexicalSearch: (root: string, query: string, pathPrefix: string | undefined, limit: number) => LexicalSearchHit[];
+}
+
+export interface NavigationEvalLookupResult {
+  filesRead: string[];
+  searchTop: FileSelectionDiagnostic[];
+  searchCandidates?: SearchCandidateSelectionDiagnostic[];
+  contextTarget?: string;
+  readFirst?: FileSelectionDiagnostic[];
+  readPlanDebug?: ReadPlanDiagnostics;
 }
 
 export interface BaseNavigationCaseMetrics {
@@ -169,6 +195,47 @@ export function deltaMetrics(left: BaseModeMetrics, right: BaseModeMetrics): Del
     avgFilesRead: roundRate(left.avgFilesRead - right.avgFilesRead),
     avgToolCalls: roundRate(left.avgToolCalls - right.avgToolCalls),
   };
+}
+
+export function navigateForNavigationEval(options: NavigationEvalLookupOptions): NavigationEvalLookupResult {
+  const { root, stateDir, mode, query, pathPrefix, limit } = options;
+  if (mode === "lexical") {
+    const hits = options.lexicalSearch(root, query, pathPrefix, limit);
+    return {
+      filesRead: hits.map((hit) => hit.path),
+      searchTop: uniqueSelections(hits.map((hit, index) => ({ path: hit.path, source: "lexical", rank: index + 1, score: hit.score }))),
+    };
+  }
+  const searchDebug = searchCodeMapDebug({ cwd: root, query, pathPrefix, stateDir, limit });
+  const searchResults = searchDebug.results;
+  const searchPaths = searchResults.map((result) => result.path);
+  const searchCandidateBySelectedRank = new Map(searchDebug.candidates.filter((candidate) => candidate.selectedRank !== undefined).map((candidate) => [candidate.selectedRank, candidate]));
+  const searchTop: FileSelectionDiagnostic[] = uniqueSelections(searchResults.map((result, index) => {
+    const candidate = searchCandidateBySelectedRank.get(index + 1);
+    return {
+      path: result.path,
+      source: "search",
+      rank: index + 1,
+      score: roundRate(result.score),
+      kind: result.kind,
+      scoreComponents: candidate ? scoreComponents(candidate) : undefined,
+    };
+  }));
+  const searchCandidates = compactSearchCandidates(searchDebug.candidates, limit);
+  if (mode === "codemap_search") return { filesRead: searchPaths, searchTop, searchCandidates };
+  const contextTarget = searchPaths[0] ?? query;
+  const context = codemapContext({ cwd: root, target: contextTarget, pathPrefix, stateDir, limit });
+  const readFirst: FileSelectionDiagnostic[] = uniqueSelections(context.readFirst.map((item, index) => ({
+    path: item.path,
+    source: "context",
+    rank: index + 1,
+    score: "score" in item ? roundRate(item.score) : undefined,
+    kind: item.kind,
+    reasons: item.reasons?.map((reason) => reason.kind),
+  })));
+  const filesRead = mergeSearchContextReadPlan(searchPaths, context.readFirst, limit);
+  const readPlanDebug = explainSearchContextReadPlan(searchPaths, context.readFirst, limit);
+  return { filesRead, searchTop, searchCandidates, contextTarget, readFirst, readPlanDebug };
 }
 
 export function compactSearchCandidates(candidates: SearchCandidateDebugDiagnostic[], limit: number): SearchCandidateSelectionDiagnostic[] {

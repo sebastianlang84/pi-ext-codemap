@@ -5,30 +5,24 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { codemapContext } from "../src/core/context.ts";
 import { summarizeMissTaxonomy, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
 import { indexRepo } from "../src/core/indexer.ts";
 import {
   assessNavigationCase,
-  compactSearchCandidates,
   lexicalScore,
+  navigateForNavigationEval,
   parseNonNegativeNumber,
   parsePositiveInteger,
   queryTerms,
   roundMs,
-  roundRate,
-  scoreComponents,
   stripScoreComponents,
   summarizeModeMetrics,
   timed,
-  uniqueSelections,
   type BaseModeMetrics,
   type FileSelectionDiagnostic,
-  type NavigationMode,
+  type NavigationEvalLookupResult,
   type SearchCandidateSelectionDiagnostic,
 } from "../src/core/navigation-eval.ts";
-import { explainSearchContextReadPlan, mergeSearchContextReadPlan, type ReadPlanDiagnostics } from "../src/core/navigation-read-plan.ts";
-import { searchCodeMapDebug } from "../src/core/search.ts";
 
 interface NavigationTask {
   name: string;
@@ -69,16 +63,7 @@ interface NavigationDiagnostics {
   contextTarget?: string;
   readFirst?: FileSelectionDiagnostic[];
   readPlan?: string[];
-  readPlanDebug?: ReadPlanDiagnostics;
-}
-
-interface NavigationResult {
-  filesRead: string[];
-  searchTop: FileSelectionDiagnostic[];
-  searchCandidates?: SearchCandidateSelectionDiagnostic[];
-  contextTarget?: string;
-  readFirst?: FileSelectionDiagnostic[];
-  readPlanDebug?: ReadPlanDiagnostics;
+  readPlanDebug?: NavigationEvalLookupResult["readPlanDebug"];
 }
 
 type ModeMetrics = BaseModeMetrics;
@@ -270,45 +255,9 @@ function evaluateTask(options: { root: string; stateDir: string; mode: Navigatio
   };
 }
 
-function navigate(options: { root: string; stateDir: string; mode: NavigationMode; task: NavigationTask; limit: number }): NavigationResult {
+function navigate(options: { root: string; stateDir: string; mode: NavigationMode; task: NavigationTask; limit: number }): NavigationEvalLookupResult {
   const { root, stateDir, mode, task, limit } = options;
-  if (mode === "lexical") {
-    const hits = lexicalSearch(root, task.query, task.pathPrefix, limit);
-    return {
-      filesRead: hits.map((hit) => hit.path),
-      searchTop: uniqueSelections(hits.map((hit, index) => ({ path: hit.path, source: "lexical", rank: index + 1, score: hit.score }))),
-    };
-  }
-  const searchDebug = searchCodeMapDebug({ cwd: root, query: task.query, pathPrefix: task.pathPrefix, stateDir, limit });
-  const searchResults = searchDebug.results;
-  const searchPaths = searchResults.map((result) => result.path);
-  const searchCandidateBySelectedRank = new Map(searchDebug.candidates.filter((candidate) => candidate.selectedRank !== undefined).map((candidate) => [candidate.selectedRank, candidate]));
-  const searchTop: FileSelectionDiagnostic[] = uniqueSelections(searchResults.map((result, index) => {
-    const candidate = searchCandidateBySelectedRank.get(index + 1);
-    return {
-      path: result.path,
-      source: "search",
-      rank: index + 1,
-      score: roundRate(result.score),
-      kind: result.kind,
-      scoreComponents: candidate ? scoreComponents(candidate) : undefined,
-    };
-  }));
-  const searchCandidates = compactSearchCandidates(searchDebug.candidates, limit);
-  if (mode === "codemap_search") return { filesRead: searchPaths, searchTop, searchCandidates };
-  const contextTarget = searchPaths[0] ?? task.query;
-  const context = codemapContext({ cwd: root, target: contextTarget, pathPrefix: task.pathPrefix, stateDir, limit });
-  const readFirst: FileSelectionDiagnostic[] = uniqueSelections(context.readFirst.map((item, index) => ({
-    path: item.path,
-    source: "context",
-    rank: index + 1,
-    score: "score" in item ? roundRate(item.score) : undefined,
-    kind: item.kind,
-    reasons: item.reasons?.map((reason) => reason.kind),
-  })));
-  const filesRead = mergeSearchContextReadPlan(searchPaths, context.readFirst, limit);
-  const readPlanDebug = explainSearchContextReadPlan(searchPaths, context.readFirst, limit);
-  return { filesRead, searchTop, searchCandidates, contextTarget, readFirst, readPlanDebug };
+  return navigateForNavigationEval({ root, stateDir, mode, query: task.query, pathPrefix: task.pathPrefix, limit, lexicalSearch });
 }
 
 function lexicalSearch(root: string, query: string, pathPrefix = "", limit: number): Array<{ path: string; score: number }> {

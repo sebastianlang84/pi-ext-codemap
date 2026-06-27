@@ -162,7 +162,7 @@ Noise handling:
 - Public `codemap_search` results stay compact and do not expose ranking explain fields.
 - Internal score diagnostics may decompose retrieval/FTS/path/filename/symbol/coverage/role/noise components for tests and benchmark debugging.
 
-Search-quality gates and diagnostics are documented in [`search-quality.md`](search-quality.md). Navigation eval scripts share Pi-independent assessment, metric, and diagnostic-shaping helpers in `src/core/navigation-eval.ts`; scripts should remain suite/CLI adapters around that core seam.
+Search-quality gates and diagnostics are documented in [`search-quality.md`](search-quality.md). Navigation eval scripts share Pi-independent assessment, metric, diagnostic-shaping, and Search+Context lookup helpers in `src/core/navigation-eval.ts`; scripts should remain suite/CLI adapters around that core seam.
 
 ## Context builder
 
