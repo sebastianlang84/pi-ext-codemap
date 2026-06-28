@@ -10,6 +10,7 @@ import { fixtureRepo, useIsolatedHome } from "./helpers/repo-fixture.ts";
 useIsolatedHome();
 
 const { indexRepo } = await import("../src/core/indexer.ts");
+const { CODEMAP_BASH_NUDGE_TEXT, shouldNudgeForCodeMapNavigationCommand } = await import("../src/pi-extension/bash-nudge.ts");
 const { registerCodeMapTools } = await import("../src/pi-extension/tools.ts");
 const { registerCodeMapCommands } = await import("../src/pi-extension/commands.ts");
 const { codeMapContext, codeMapIndex, codeMapSearch, codeMapStatus, parsePathPrefix } = await import("../src/pi-extension/operations.ts");
@@ -136,6 +137,71 @@ test("session start shows neutral status for an unapproved repo", async (t) => {
   }
 
   assert.deepEqual(statuses, [{ key: "codemap", text: "[CodeMap ✗]" }]);
+});
+
+test("bash CodeMap nudge classifies broad discovery but skips targeted checks", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-bash-nudge-classify-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src", "known.ts"), "export const needle = true;\n");
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "known" }));
+  writeFileSync(join(root, "README"), "Known file\n");
+
+  const shouldNudge = (command: string) => shouldNudgeForCodeMapNavigationCommand(command, { cwd: root });
+
+  assert.equal(shouldNudge("rg needle"), true);
+  assert.equal(shouldNudge("rg --files src"), true);
+  assert.equal(shouldNudge("grep -R needle ."), true);
+  assert.equal(shouldNudge("git grep needle"), true);
+  assert.equal(shouldNudge("find . -name '*.ts'"), true);
+
+  assert.equal(shouldNudge("rg needle src/known.ts"), false);
+  assert.equal(shouldNudge("grep -n version package.json"), false);
+  assert.equal(shouldNudge("git grep needle -- src/known.ts"), false);
+  assert.equal(shouldNudge("git diff -- src/known.ts | grep needle"), false);
+  assert.equal(shouldNudge("find README -maxdepth 0 -print"), false);
+  assert.equal(shouldNudge("find . -delete"), false);
+});
+
+test("bash CodeMap nudge appends once for broad fresh indexed searches", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-bash-nudge-indexed-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src", "index.ts"), "export const needle = true;\n");
+  indexRepo({ cwd: root, approve: true });
+
+  type ToolResultHandler = (event: Record<string, unknown>, ctx: { cwd: string }) => Promise<{ content?: Array<{ type: string; text?: string }> } | undefined>;
+  let toolResult: ToolResultHandler | undefined;
+  let sessionShutdown: (() => void) | undefined;
+  codeMapExtension({
+    on(name: string, handler: unknown) {
+      if (name === "tool_result") toolResult = handler as ToolResultHandler;
+      if (name === "session_shutdown") sessionShutdown = handler as () => void;
+    },
+    registerTool() {},
+    registerCommand() {},
+  } as never);
+
+  const eventFor = (command: string) => ({
+    type: "tool_result",
+    toolName: "bash",
+    toolCallId: command,
+    input: { command },
+    content: [{ type: "text", text: "bash output" }],
+    details: undefined,
+    isError: false,
+  });
+
+  const first = await toolResult?.(eventFor("rg needle"), { cwd: root });
+  assert.equal(first?.content?.at(-1)?.text, CODEMAP_BASH_NUDGE_TEXT);
+
+  const repeated = await toolResult?.(eventFor("find . -name '*.ts'"), { cwd: root });
+  assert.equal(repeated, undefined);
+
+  sessionShutdown?.();
+  const targeted = await toolResult?.(eventFor("rg needle src/index.ts"), { cwd: root });
+  assert.equal(targeted, undefined);
 });
 
 test("registers only codemap tools with compact complete prompt guidance", () => {

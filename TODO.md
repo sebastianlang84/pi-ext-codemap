@@ -19,7 +19,16 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
 
 ## Nächste sinnvolle Slices — vorgeschlagene Reihenfolge
 
-1. [ ] Test-/Script-Monolith Deepening: nächsten Refactor-Slice auswählen und umsetzen.
+1. [ ] Nächsten Expanded-Natural-Holdout-Fix-Slice nur bei neuem konkretem Miss auswählen.
+   - Aktueller Release-Stand: Baseline und Natural-Holdout waren vor `0.5.3` voll grün; alte Miss-Listen nicht als aktive Defekte behandeln.
+   - Regel: erst Diagnose/öffentlicher Regressionstest, dann maximal ein Hebel; keine Query-/Threshold-Änderung als Ersatz für Systemverbesserung.
+
+2. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
+   - Erledigt: Route↔Handler ist als enge Next.js-Route-Adapter-zu-`*handler*`-Quelle plus Handler-Test-Fixture umgesetzt.
+   - Nächste Kandidaten: UI↔API, Provider/Hook↔Consumer, Config-Key↔Nutzung; Source↔Test nur wieder anfassen, wenn ein neuer Eval-Miss nicht durch Entry/Search-Ranking verursacht ist.
+   - Regel: pro Konvention ein Fixture/Real-Repo-Case, eigene Metrik, keine breite Heuristik ohne messbaren Gewinn.
+
+3. [ ] Test-/Script-Monolith Deepening nur opportunistisch fortführen.
    - Erledigt: `test/` heißt jetzt `tests/`; Storage-/Migration-Verträge liegen in `tests/storage.test.ts`, Pi-Adapter-Verträge in `tests/pi-extension.test.ts`, gemeinsame Temp-Repo/Home-Fixtures liegen in `tests/helpers/repo-fixture.ts`, die reinen Search+Context-Read-Plan-Verträge liegen in `tests/search-read-plan.test.ts`, Natural-Navigation-Search+Context-Fixtures liegen in `tests/search-natural-navigation.test.ts`, öffentliche Search-Navigation-Ranking-/Noise-Verträge liegen in `tests/search-navigation-ranking.test.ts`, reine Eval-Diagnostik-/Miss-Taxonomy-Verträge liegen in `tests/search-eval-diagnostics.test.ts`, der Eval-Report-Smoke liegt in `tests/search-eval-report.test.ts`, reine Query-Plan-/Ranking-Verträge liegen in `tests/search-ranking.test.ts`, interne Search-Diagnostics-Verträge liegen in `tests/search-diagnostics.test.ts`, Context-Relationship-/Graph-Verträge liegen in `tests/search-context-relationships.test.ts`, stale/status/safety/pathPrefix-Verträge liegen in `tests/search-index-status.test.ts`, und gemeinsame Navigation-Eval-Bewertung/Metrik-/Lookup-Helfer liegen in `src/core/navigation-eval.ts` mit `tests/navigation-eval.test.ts`.
    - Review-Befund: `tests/search.test.ts` (~0.13k Zeilen) ist jetzt ein kompakter Search-/Symbol-/Alias-Smoke; `scripts/eval-agent-navigation.ts` und `scripts/eval-real-repo-navigation.ts` teilen Bewertung/Metriken/Scoring/Search+Context-Lookup-Helfer, enthalten aber weiterhin eigene Suite-/Fixture-/CLI-/Gate-Adapterlogik.
    - Priorisierte Kandidaten:
@@ -30,15 +39,6 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Namenskonvention: `test/` → `tests/` ist erledigt; weitere Splits sollen Package-/Doku-Referenzen synchron halten.
    - Guardrail: `src/core/search-quality-metrics.ts`, `src/core/eval-miss-taxonomy.ts`, `src/core/eval-navigation-diagnostics.ts`, `src/core/navigation-read-plan.ts`, `src/core/context-builder.ts` und `src/core/relationships.ts` wiederverwenden; keine Pi/TUI-Adapter-Details in Core-Tests ziehen.
    - Verifikation: pro Slice `npm run typecheck`/`npm test`; bei Script-Eval-Änderungen zusätzlich betroffene `bench:*`/`eval:*:gate` ausführen.
-
-2. [ ] Nächsten Expanded-Natural-Holdout-Fix-Slice nur bei neuem konkretem Miss auswählen.
-   - Aktueller Release-Stand: Baseline und Natural-Holdout waren vor `0.5.3` voll grün; alte Miss-Listen nicht als aktive Defekte behandeln.
-   - Regel: erst Diagnose/öffentlicher Regressionstest, dann maximal ein Hebel; keine Query-/Threshold-Änderung als Ersatz für Systemverbesserung.
-
-3. [ ] Weitere Konventions-Nachbarn als kleine, getrennte Verticals testen.
-   - Erledigt: Route↔Handler ist als enge Next.js-Route-Adapter-zu-`*handler*`-Quelle plus Handler-Test-Fixture umgesetzt.
-   - Nächste Kandidaten: UI↔API, Provider/Hook↔Consumer, Config-Key↔Nutzung; Source↔Test nur wieder anfassen, wenn ein neuer Eval-Miss nicht durch Entry/Search-Ranking verursacht ist.
-   - Regel: pro Konvention ein Fixture/Real-Repo-Case, eigene Metrik, keine breite Heuristik ohne messbaren Gewinn.
 
 4. [ ] Workspace-/Multi-Config-Pfadalias nur als gated Slice angehen.
    - Scope: erst bei konkretem Miss mit `tsconfig`/`jsconfig` `extends`, Workspace-Alias oder vielen Alias-Imports; dann minimalen Resolver/Ordering-Fix bauen.
@@ -59,11 +59,6 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Verifikation: Doku-/Package-Änderungen mit `npm pack --dry-run --json`, `npm run audit:lightweight`, `npm run check:token-injection` prüfen.
 
 ## Diskussionspunkte / offen
-
-1. [ ] **tool_result-Nudge: Codemap-Nutzung bei grep/rg/find fördern**
-   - Beobachtung: LLM-Agenten (inkl. Subagents) greifen konsistent zu `bash`/`grep`/`find` statt zu `codemap_search`/`codemap_context`, auch wenn ein Index vorhanden ist. `promptGuidelines` ändern das Verhalten nicht zuverlässig — sie konkurrieren als undifferenzierte Bullets im System-Prompt gegen starke Base-Model-Priors.
-   - Idee: `tool_result`-Hook in pi-ext-codemap: wenn `bash` mit `rg`/`grep`/`find` aufgerufen wird und ein frischer Codemap-Index für das cwd existiert, wird ans Tool-Result ein einzeiliger Hinweis angehängt: *„codemap ist für dieses Repo indexiert — für Navigations-Queries bevorzuge codemap_search statt grep/rg.
-   - Live-Issue 2026-06-26: Der Nudge warnt auch bei gezieltem `grep`/`find` in bereits bekannten/konkret gelesenen Dateien, nachdem Navigation vorher korrekt über CodeMap lief. Das erzeugt noisy Tool-Results. Prüfen: Nudge nur für erkennbare Navigations-/Discovery-Patterns laut ausgeben; bei konkreten bekannten Pfaden/Symbol-Checks stiller Hinweis, Downgrade oder keine Warnung.
 
 1. [ ] Thin CLI Adapter über `src/core/` ergänzen.
    - Scope: kleiner CLI-Adapter, zuerst `status --json` und maximal ein Such-/Context-Befehl.

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Replace the bash grep/rg/find pre-execution block with a once-per-repo `tool_result` nudge that only appears for broad navigation/discovery commands against a fresh CodeMap index, skipping targeted known-file checks.
 - Extract shared navigation-eval assessment, metric, and Search+Context lookup helpers into Pi-independent core so eval scripts can stay thinner adapters without changing CodeMap ranking/context behavior.
 - Split Natural-Navigation search+context fixtures out of the remaining large search test suite without changing public CodeMap behavior.
 - Split public search navigation ranking/noise fixtures out of the core search smoke suite without changing CodeMap behavior.
