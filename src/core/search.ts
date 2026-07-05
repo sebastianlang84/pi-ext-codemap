@@ -55,7 +55,10 @@ export interface CodeMapSearchDebugReport {
 
 export function searchCodeMapWithDiagnostics(options: { query: string; cwd?: string; limit?: number; pathPrefix?: string } & StateOptions): CodeMapSearchPackage {
   const pathPrefix = normalizePathPrefix(options.pathPrefix);
-  const diagnostics = status(options.cwd, { health: "full", pathPrefix, stateDir: options.stateDir }) as SearchDiagnostics & { root: string };
+  // Cheap (HEAD-based) health only: a full scan hashes the entire repo on every
+  // search, which dominates latency on large repos. Search staleness is advisory
+  // (see promptGuidelines); the file-level stale scan stays behind codemap_status --full.
+  const diagnostics = status(options.cwd, { health: "cheap", pathPrefix, stateDir: options.stateDir }) as SearchDiagnostics & { root: string };
   return {
     query: options.query,
     root: diagnostics.root,

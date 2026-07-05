@@ -13,7 +13,7 @@ const { indexRepo, status } = await import("../src/core/indexer.ts");
 const { searchCodeMap, searchCodeMapWithDiagnostics } = await import("../src/core/search.ts");
 const { codemapContext } = await import("../src/core/context.ts");
 
-test("search diagnostics warn without auto-refreshing stale indexes", (t) => {
+test("search uses cheap health and does not auto-refresh stale indexes", (t) => {
   const root = fixtureRepo(t);
   writeFileSync(join(root, "src", "core", "new-feature.ts"), `
 export function newFeatureFlag() {
@@ -21,16 +21,41 @@ export function newFeatureFlag() {
 }
 `);
 
+  // Cheap (HEAD-based) health does not hash the working tree, so an unindexed
+  // new file is not flagged here — that file-level scan lives in codemap_status --full.
   const result = searchCodeMapWithDiagnostics({ cwd: root, query: "newFeatureFlag", limit: 5 });
-  assert.equal(result.stale, true);
-  assert.equal(result.missing, 1);
-  assert.match(result.warnings.join("\n"), /Index stale/);
+  assert.equal(result.stale, false);
+  assert.equal(result.missing, 0);
   assert.equal(result.results.length, 0);
 
   indexRepo({ cwd: root });
   const refreshed = searchCodeMapWithDiagnostics({ cwd: root, query: "newFeatureFlag", limit: 5 });
   assert.equal(refreshed.stale, false);
   assert.equal(refreshed.results[0]?.path, "src/core/new-feature.ts");
+});
+
+test("search reports HEAD-based staleness without a full working-tree scan", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-search-head-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "codemap@example.test"], { cwd: root });
+  execFileSync("git", ["config", "user.name", "CodeMap Test"], { cwd: root });
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src", "feature.ts"), "export function featureFlag() { return true; }\n");
+  execFileSync("git", ["add", "."], { cwd: root });
+  execFileSync("git", ["commit", "-m", "initial"], { cwd: root, stdio: "ignore" });
+
+  indexRepo({ cwd: root, approve: true });
+  const clean = searchCodeMapWithDiagnostics({ cwd: root, query: "featureFlag", limit: 5 });
+  assert.equal(clean.stale, false);
+
+  writeFileSync(join(root, "src", "feature.ts"), "export function featureFlag() { return false; }\n");
+  execFileSync("git", ["add", "."], { cwd: root });
+  execFileSync("git", ["commit", "-m", "update"], { cwd: root, stdio: "ignore" });
+
+  const stale = searchCodeMapWithDiagnostics({ cwd: root, query: "featureFlag", limit: 5 });
+  assert.equal(stale.stale, true);
+  assert.match(stale.warnings.join("\n"), /Git HEAD changed/);
 });
 
 test("context diagnostics warn without auto-refreshing stale indexes", (t) => {

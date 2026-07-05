@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make `codemap_search` use cheap (Git HEAD-based) health instead of a full working-tree scan, so every search no longer re-hashes the entire repository; search staleness stays advisory (HEAD changes still flagged) and the file-level stale scan remains behind `codemap_status --full`.
+
 ## 0.6.9 - 2026-06-28
 
 - Replace the bash grep/rg/find pre-execution block with a once-per-repo `tool_result` nudge that only appears for broad navigation/discovery commands against a fresh CodeMap index, skipping targeted known-file checks.

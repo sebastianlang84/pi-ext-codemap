@@ -58,6 +58,16 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Token-Budget: `codemap_context` und Gesamtbudget sind nahe am Gate; neue Parameter, Guidelines oder öffentliche Tools nur mit `npm run check:token-injection` und expliziter Budgetentscheidung.
    - Verifikation: Doku-/Package-Änderungen mit `npm pack --dry-run --json`, `npm run audit:lightweight`, `npm run check:token-injection` prüfen.
 
+7. [ ] Symbol-Abdeckung für weitere Sprachen als kleine Verticals ergänzen (Review 2026-07-05).
+   - Befund: `src/core/symbols.ts` extrahiert Symbole nur für TS/JS/Python + Markdown-Headings; Go/Rust/Java/Ruby/PHP werden zwar indiziert (`src/core/scan-policy.ts`), liefern aber null Symbole, sodass Symbol-Ranking dort ausfällt.
+   - Scope: pro Sprache schlanke Regex-Patterns (`func`/`fn`/`def`/`class`/…) im bestehenden Regex-Ansatz; kein Tree-sitter/ast-grep (nach CHANGELOG 0.5.5 bewusst verworfen).
+   - Verifikation: pro Sprache ein Fixture mit erwartetem Symbol-Treffer über `codemap_search`; bestehende Search-/Ranking-Gates dürfen nicht regressieren.
+
+8. [ ] DB-Hygiene: FTS-Duplikat und State-GC (Review 2026-07-05).
+   - Befund: Chunk-Text liegt doppelt (`chunks` + `chunks_fts`, `migrations/002_fts.sql` / `src/core/index-store.ts`); FTS5 external-content würde die DB ~halbieren. Zusätzlich fehlt Registry-GC für gelöschte Repos (lokal ~692 MB State beobachtet, davon ein Repo ~674 MB).
+   - Scope: als gated Migration/Slice; external-content-FTS und ein GC-/Prune-Befehl für verwaiste Repo-DBs getrennt bewerten.
+   - Verifikation: Storage-/Migration-Verträge in `tests/storage.test.ts` erweitern; Re-Index-Roundtrip und Suchtreffer identisch vor/nach Migration.
+
 ## Diskussionspunkte / offen
 
 1. [ ] Thin CLI Adapter über `src/core/` ergänzen.
