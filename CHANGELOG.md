@@ -4,6 +4,7 @@
 
 - Make `codemap_search` use cheap (Git HEAD-based) health instead of a full working-tree scan, so every search no longer re-hashes the entire repository; search staleness stays advisory (HEAD changes still flagged) and the file-level stale scan remains behind `codemap_status --full`.
 - Extract C/C++ symbols (functions, methods, `struct`/`union`/`enum`/`class`) so C/C++ files are searchable by symbol like TS/JS/Python, and normalize C/C++ file extensions to canonical `c`/`cpp` language tags. Structured (brace-based) chunking for C/C++ stays out of scope for now.
+- Document priority languages (TypeScript, JavaScript, C, C++) in the PRD and add a per-capability language support matrix (text/symbols/chunking/relationships) to the architecture docs.
 
 ## 0.6.9 - 2026-06-28
 

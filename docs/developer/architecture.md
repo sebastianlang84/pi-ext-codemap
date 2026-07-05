@@ -141,6 +141,19 @@ Lockfiles are supported text files, not generated binaries. They may be indexed 
 
 Symbol extraction uses cheap deterministic regexes. `ast-grep` is not part of indexing; when installed locally, the search-quality benchmark may use it only as optional structural ground truth.
 
+### Language support tiers
+
+Priority languages are TypeScript, JavaScript, C, and C++ (product scope in [`../product/PRD.md#priority-languages`](../product/PRD.md#priority-languages)). Support is layered per capability, so a language may have symbols without structured chunking:
+
+| Capability | Languages |
+| --- | --- |
+| Text / FTS indexing | all whitelisted extensions (see scanner allowlist) |
+| Symbol extraction (`src/core/symbols.ts`) | TypeScript, JavaScript, Python, C, C++ (+ Markdown headings) |
+| Structured (brace/indent) chunking (`src/core/chunker.ts`) | TypeScript, JavaScript, Python |
+| Import/include relationships (`src/core/relationships.ts`) | TypeScript/JavaScript imports, Python relative imports, C/C++ quoted includes |
+
+C/C++ file extensions are normalized to canonical `c`/`cpp` language tags in `src/core/scan-policy.ts`. A language outside a given row falls back to the lighter behavior (fixed-window chunks, no symbols or relationships). Structured chunking for C/C++ is a known gap tracked in the backlog.
+
 ## Search and ranking
 
 V1 ranking is deterministic and lexical/local-first. Embeddings are not part of V1 ranking.

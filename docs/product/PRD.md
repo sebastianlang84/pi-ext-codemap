@@ -172,6 +172,10 @@ V1 explicitly excludes:
 - background crawl across repos;
 - Prisma ORM.
 
+### Priority languages
+
+CodeMap must serve these languages first-class for symbol- and structure-aware navigation: **TypeScript, JavaScript, C, and C++**. Python retains earlier symbol and structured-chunking support. Every other whitelisted extension (see the scanner allowlist) is still indexed and searchable as paths, FTS chunks, and text, but without language-specific symbol or structure awareness. The exact per-capability status by language lives in [`../developer/architecture.md#language-support-tiers`](../developer/architecture.md#language-support-tiers); new language work should update that matrix.
+
 ## 10. Safety and privacy requirements
 
 The tool must only index explicitly approved Git repositories.
