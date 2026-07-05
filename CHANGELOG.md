@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.7.1 - 2026-07-05
+
 - Store the FTS indexes as contentless FTS5 (`content='', contentless_delete=1`) instead of duplicating chunk/symbol text in the FTS shadow tables. Search reads only use the FTS index for `MATCH`/`bm25()` and join back to the base tables, so matching is unchanged while the on-disk index shrinks (~40% smaller on a code-heavy repo). Legacy content-owning FTS databases are converted in place and repopulated from the base tables on next open, so no reindex is required.
 
 ## 0.7.0 - 2026-07-05
