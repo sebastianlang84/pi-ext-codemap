@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-07-05
+
 - Add a standalone `codemap` CLI (`bin/codemap.ts`, `src/cli/`) so non-Pi agents such as Claude Code and Codex can use CodeMap: `codemap search|context|status|index`, all accepting `--json`, `--repo`, and `--path-prefix`. The CLI is a thin adapter over the Pi-independent core (no `src/pi-extension/` imports); `runCli` returns `{ code, out, err }` for testability. README now leads with the value proposition, the for/not-for boundaries, and CLI install + `CLAUDE.md`/`AGENTS.md` wiring.
 - Add a state garbage-collector (`npm run gc:state`, core `pruneState`/`collectStateGcCandidates`) that reclaims orphaned per-repo index DBs (no registry row) and DBs for deleted/moved repo roots, and drops their leftover registry approval rows. Dry-run by default; `--apply` deletes and `--json` emits machine output. Index DBs are rebuildable, so pruning only clears cached data and stale approvals.
 
