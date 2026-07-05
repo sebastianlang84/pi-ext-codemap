@@ -58,6 +58,17 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Token-Budget: `codemap_context` und Gesamtbudget sind nahe am Gate; neue Parameter, Guidelines oder öffentliche Tools nur mit `npm run check:token-injection` und expliziter Budgetentscheidung.
    - Verifikation: Doku-/Package-Änderungen mit `npm pack --dry-run --json`, `npm run audit:lightweight`, `npm run check:token-injection` prüfen.
 
+7. [ ] Strukturiertes Chunking für C/C++ als separaten Slice prüfen (Review 2026-07-05).
+   - Erledigt: C/C++-Symbole (Funktions-/Methoden-Definitionen, `struct`/`union`/`enum`/`class`) in `src/core/symbols.ts`; C/C++-Extensions auf kanonische Tags `c`/`cpp` in `src/core/scan-policy.ts` normalisiert; Verträge in `tests/symbols-c-cpp.test.ts`.
+   - Offen: C/C++ nutzt weiter Fixed-Window-Chunking. Strukturiertes Brace-Chunking (`src/core/chunker.ts`) ist auf JS/TS zugeschnitten — der Brace-Scanner hat Regex-Literal-Heuristiken (`isRegexStart`), die auf C-`/`-Division fehlzünden; erst mit sprachspezifischem Scanner und Fixture-Beleg angehen.
+   - Bekannte Symbol-Grenzen: anonyme `typedef struct { … } Name;` (Name auf der Schluss-Zeile) und Makros werden noch nicht als Symbole erfasst; nur bei konkretem Miss ergänzen.
+   - Später (nicht aktuell relevant): Go/Rust/Java/Ruby/PHP-Symbole nur bei konkretem Bedarf als weitere Verticals.
+
+8. [ ] DB-Hygiene: FTS-Duplikat und State-GC (Review 2026-07-05).
+   - Befund: Chunk-Text liegt doppelt (`chunks` + `chunks_fts`, `migrations/002_fts.sql` / `src/core/index-store.ts`); FTS5 external-content würde die DB ~halbieren. Zusätzlich fehlt Registry-GC für gelöschte Repos (lokal ~692 MB State beobachtet, davon ein Repo ~674 MB).
+   - Scope: als gated Migration/Slice; external-content-FTS und ein GC-/Prune-Befehl für verwaiste Repo-DBs getrennt bewerten.
+   - Verifikation: Storage-/Migration-Verträge in `tests/storage.test.ts` erweitern; Re-Index-Roundtrip und Suchtreffer identisch vor/nach Migration.
+
 ## Diskussionspunkte / offen
 
 1. [ ] Thin CLI Adapter über `src/core/` ergänzen.

@@ -37,5 +37,7 @@ export function detectLanguage(path: string): string {
   if ([".js", ".jsx", ".mjs", ".cjs"].includes(ext)) return "javascript";
   if (ext === ".json") return "json";
   if ([".yml", ".yaml"].includes(ext)) return "yaml";
+  if ([".c", ".h"].includes(ext)) return "c";
+  if ([".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx"].includes(ext)) return "cpp";
   return ext.slice(1);
 }

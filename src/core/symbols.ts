@@ -18,7 +18,43 @@ const patterns: Array<{ kind: string; rx: RegExp }> = [
   { kind: "heading", rx: /^\s{0,3}#{1,6}\s+(.+)/ },
 ];
 
+const cFamilyLanguages = new Set(["c", "cpp"]);
+const cControlKeywords = new Set(["if", "for", "while", "switch", "return", "sizeof", "do", "else", "catch"]);
+// Named aggregate definition with a body brace and no `;` before it (skips forward
+// declarations like `struct Node;` and variable declarations like `struct Point p;`).
+const cAggregateRx = /^\s*(?:typedef\s+)?(struct|union|enum|class)\s+([A-Za-z_]\w*)\b[^;]*\{/;
+// Return type / qualifier (or `Class::`) followed by the name right before `(`.
+const cFunctionRx = /^\s*([A-Za-z_][\w\s*&<>,:~]*?[\s*&:>])([A-Za-z_]\w*)\s*\(/;
+
+function extractCFamilySymbols(text: string): ExtractedSymbol[] {
+  const symbols: ExtractedSymbol[] = [];
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
+
+    const aggregate = line.match(cAggregateRx);
+    if (aggregate) {
+      const kind = aggregate[1] === "class" ? "class" : aggregate[1];
+      symbols.push({ name: aggregate[2], kind, startLine: i + 1, signature: trimmed.slice(0, 240) });
+      continue;
+    }
+
+    // Skip prototypes and call statements; multi-line signatures still match on their first line.
+    if (trimmed.endsWith(";")) continue;
+    const fn = line.match(cFunctionRx);
+    if (!fn) continue;
+    const name = fn[2];
+    if (cControlKeywords.has(name)) continue;
+    const kind = fn[1].includes("::") ? "method" : "function";
+    symbols.push({ name, kind, startLine: i + 1, signature: trimmed.slice(0, 240) });
+  }
+  return symbols;
+}
+
 export function extractSymbols(text: string, language: string): ExtractedSymbol[] {
+  if (cFamilyLanguages.has(language)) return extractCFamilySymbols(text);
   const symbols: ExtractedSymbol[] = [];
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
