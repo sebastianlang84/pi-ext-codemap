@@ -2,7 +2,23 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { planQuery } = await import("../src/core/query-plan.ts");
-const { scoreSearchRow } = await import("../src/core/ranking.ts");
+const { scoreSearchRow, topHitConfidence } = await import("../src/core/ranking.ts");
+
+const scored = (scores: number[]) => scores.map((score, index) => ({ score, path: `f${index}.ts`, startLine: 1 } as never));
+
+test("topHitConfidence flags a bunched top cluster as low", () => {
+  // Real scores from the macrolens wrong-anchor regressor: the top hit (regime-score.ts) barely
+  // edges out rank 2, so anchoring codemap_context on it is unsafe — the routing eval's scenario D.
+  const regressor = topHitConfidence(scored([28.091, 27.818, 27.273, 27.273, 27.0]));
+  assert.equal(regressor.level, "low");
+  assert.ok(regressor.margin < 0.02, `margin ${regressor.margin}`);
+});
+
+test("topHitConfidence marks a clear leader high and handles small result sets", () => {
+  assert.equal(topHitConfidence(scored([40, 20, 10])).level, "high");
+  assert.equal(topHitConfidence(scored([25])).level, "single");
+  assert.equal(topHitConfidence(scored([])).level, "none");
+});
 
 test("generic implementation role intent does not imply main entrypoint intent", () => {
   assert.deepEqual(planQuery("memory retrieval implementation").roleIntents, ["implementation"]);

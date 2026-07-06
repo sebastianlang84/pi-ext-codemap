@@ -1,0 +1,24 @@
+{
+  "$comment": "Seed episode set for the routing eval (scripts/eval-agent-routing.ts). Expand to ~25 across the 5 nav-eval repos per experiments/agent-routing.episodes.md before the first calibration run, then freeze. The D episode below is fully verified from real search diagnostics: on this query codemap_search anchors on regime-score.ts (topHitConfidence low) while the true entry is macro-signal-rules.ts.",
+  "episodes": [
+    {
+      "id": "macrolens-D-macro-signal-threshold",
+      "repo": "macrolens",
+      "scenario": "D_wrong_top_hit",
+      "prompt": "The market regime cards should show a neutral tone at the threshold values for VIX, oil, CPI, payrolls, the yield curve and credit. Where is that decided?",
+      "lowConfidenceTopPath": "apps/web/src/lib/regime-score.ts"
+    },
+    {
+      "id": "macrolens-A-finra-parser",
+      "repo": "macrolens",
+      "scenario": "A_plain_navigation",
+      "prompt": "Where is the FINRA margin worksheet XML parsed?"
+    },
+    {
+      "id": "macrolens-C-known-file",
+      "repo": "macrolens",
+      "scenario": "C_confident_anchor",
+      "prompt": "I'm about to change apps/web/src/lib/providers/finra.ts — what tests and callers should I read first?"
+    }
+  ]
+}
