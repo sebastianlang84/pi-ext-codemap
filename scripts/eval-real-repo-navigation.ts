@@ -133,6 +133,9 @@ interface ParsedArgs {
   minNaturalHoldoutContextRecall: number;
   minSuccessDeltaVsLexical: number;
   minContextRecallDeltaVsSearch: number;
+  minContextWinsVsSearch: number;
+  maxContextLossesVsSearch: number;
+  maxSingleContextLossVsSearch: number;
 }
 
 const modes: NavigationMode[] = ["lexical", "codemap_search", "codemap_search_context"];
@@ -385,6 +388,9 @@ function parseArgs(args: string[]): ParsedArgs {
   let minNaturalHoldoutContextRecall = 0.55;
   let minSuccessDeltaVsLexical = 0.2;
   let minContextRecallDeltaVsSearch = 0.2;
+  let minContextWinsVsSearch = 5;
+  let maxContextLossesVsSearch = 1;
+  let maxSingleContextLossVsSearch = 0.25;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     const [name, inlineValue] = arg.split("=", 2);
@@ -423,13 +429,22 @@ function parseArgs(args: string[]): ParsedArgs {
     } else if (name === "--min-context-recall-delta-vs-search") {
       minContextRecallDeltaVsSearch = parseNonNegativeNumber(name, value);
       if (inlineValue === undefined) i++;
+    } else if (name === "--min-context-wins-vs-search") {
+      minContextWinsVsSearch = parsePositiveInteger(name, value);
+      if (inlineValue === undefined) i++;
+    } else if (name === "--max-context-losses-vs-search") {
+      maxContextLossesVsSearch = parseNonNegativeNumber(name, value);
+      if (inlineValue === undefined) i++;
+    } else if (name === "--max-single-context-loss-vs-search") {
+      maxSingleContextLossVsSearch = parseNonNegativeNumber(name, value);
+      if (inlineValue === undefined) i++;
     } else if (arg.startsWith("--")) {
       throw new Error(`Unknown option: ${arg}`);
     } else {
       throw new Error(`Unexpected positional argument: ${arg}`);
     }
   }
-  return { gateEnabled, keepState, requireRepos, limit, maxP95LatencyMs, minTasks, minNaturalHoldoutTasks, minNaturalHoldoutExpectedRecall, minNaturalHoldoutContextRecall, minSuccessDeltaVsLexical, minContextRecallDeltaVsSearch };
+  return { gateEnabled, keepState, requireRepos, limit, maxP95LatencyMs, minTasks, minNaturalHoldoutTasks, minNaturalHoldoutExpectedRecall, minNaturalHoldoutContextRecall, minSuccessDeltaVsLexical, minContextRecallDeltaVsSearch, minContextWinsVsSearch, maxContextLossesVsSearch, maxSingleContextLossVsSearch };
 }
 
 function runEval(options: ParsedArgs, stateDir: string): EvalReport {
@@ -568,7 +583,47 @@ function metricsFor(mode: NavigationMode, cases: CaseReport[]): ModeMetrics {
   };
 }
 
-function evaluateGate(report: EvalReport, options: ParsedArgs): { passed: boolean; issues: Array<{ label: string; metric: string; expected: string; actual: number | string }> } {
+interface PairedRecord {
+  pairs: number;
+  wins: number;
+  losses: number;
+  ties: number;
+  maxSingleLoss: number;
+  losingTasks: Array<{ task: string; loss: number }>;
+}
+
+// Paired per-task record of codemap_search_context contextRecall minus codemap_search
+// contextRecall, over every task in the corpus. Preferred over the mean-delta gate: with ~70%
+// ties the mean has an effective sample size far below the task count, so a single outlier
+// dominates it. A paired win/loss record with a per-task max-loss cap catches the failure mode we
+// actually care about (context evicting a correct raw hit) without flapping on mean noise.
+function pairedContextVsSearch(cases: CaseReport[]): PairedRecord {
+  const search = new Map<string, number>();
+  const context = new Map<string, number>();
+  for (const item of cases) {
+    const key = `${item.repo} :: ${item.task}`;
+    if (item.mode === "codemap_search") search.set(key, item.contextRecall);
+    else if (item.mode === "codemap_search_context") context.set(key, item.contextRecall);
+  }
+  const record: PairedRecord = { pairs: 0, wins: 0, losses: 0, ties: 0, maxSingleLoss: 0, losingTasks: [] };
+  for (const [key, ctx] of context) {
+    const base = search.get(key);
+    if (base === undefined) continue;
+    record.pairs++;
+    const delta = ctx - base;
+    if (delta > 1e-6) record.wins++;
+    else if (delta < -1e-6) {
+      record.losses++;
+      const loss = base - ctx;
+      record.maxSingleLoss = Math.max(record.maxSingleLoss, loss);
+      record.losingTasks.push({ task: key, loss: roundRate(loss) });
+    } else record.ties++;
+  }
+  record.losingTasks.sort((a, b) => b.loss - a.loss);
+  return record;
+}
+
+function evaluateGate(report: EvalReport, options: ParsedArgs): { passed: boolean; paired: PairedRecord; issues: Array<{ label: string; metric: string; expected: string; actual: number | string }> } {
   const issues: Array<{ label: string; metric: string; expected: string; actual: number | string }> = [];
   const skipped = report.repos.filter((repo) => repo.skipped);
   if (options.requireRepos) for (const repo of skipped) issues.push({ label: repo.label, metric: "repo", expected: "present", actual: repo.skipped ?? "skipped" });
@@ -578,10 +633,14 @@ function evaluateGate(report: EvalReport, options: ParsedArgs): { passed: boolea
   const lexical = metric(baseline.modes, "lexical");
   const search = metric(baseline.modes, "codemap_search");
   const successDelta = searchContext.successRate - lexical.successRate;
-  const contextRecallDelta = searchContext.avgContextRecall - search.avgContextRecall;
+  const paired = pairedContextVsSearch(report.repos.flatMap((repo) => repo.cases));
   if (searchContext.tasks < options.minTasks) issues.push({ label: searchContext.mode, metric: "tasks", expected: `>= ${options.minTasks}`, actual: searchContext.tasks });
   if (successDelta < options.minSuccessDeltaVsLexical) issues.push({ label: searchContext.mode, metric: "successDeltaVsLexical", expected: `>= ${options.minSuccessDeltaVsLexical}`, actual: roundRate(successDelta) });
-  if (contextRecallDelta < options.minContextRecallDeltaVsSearch) issues.push({ label: searchContext.mode, metric: "contextRecallDeltaVsSearch", expected: `>= ${options.minContextRecallDeltaVsSearch}`, actual: roundRate(contextRecallDelta) });
+  // Paired win/loss gate (replaces the statistically-underpowered mean-delta check): context must
+  // win on enough tasks, lose on few, and never regress a single task beyond the cap.
+  if (paired.wins < options.minContextWinsVsSearch) issues.push({ label: searchContext.mode, metric: "contextWinsVsSearch", expected: `>= ${options.minContextWinsVsSearch}`, actual: paired.wins });
+  if (paired.losses > options.maxContextLossesVsSearch) issues.push({ label: searchContext.mode, metric: "contextLossesVsSearch", expected: `<= ${options.maxContextLossesVsSearch}`, actual: paired.losses });
+  if (paired.maxSingleLoss > options.maxSingleContextLossVsSearch) issues.push({ label: searchContext.mode, metric: "maxSingleContextLossVsSearch", expected: `<= ${options.maxSingleContextLossVsSearch}`, actual: roundRate(paired.maxSingleLoss) });
   if (searchContext.successRate <= search.successRate) issues.push({ label: searchContext.mode, metric: "successRateVsSearch", expected: `> ${search.successRate}`, actual: searchContext.successRate });
   if (searchContext.avgExpectedRecall <= lexical.avgExpectedRecall) issues.push({ label: searchContext.mode, metric: "expectedRecallVsLexical", expected: `> ${lexical.avgExpectedRecall}`, actual: searchContext.avgExpectedRecall });
   if (searchContext.forbiddenReadRate > 0) issues.push({ label: searchContext.mode, metric: "forbiddenReadRate", expected: "0", actual: searchContext.forbiddenReadRate });
@@ -591,7 +650,7 @@ function evaluateGate(report: EvalReport, options: ParsedArgs): { passed: boolea
   if (holdoutSearchContext.avgExpectedRecall < options.minNaturalHoldoutExpectedRecall) issues.push({ label: "natural_holdout", metric: "avgExpectedRecall", expected: `>= ${options.minNaturalHoldoutExpectedRecall}`, actual: holdoutSearchContext.avgExpectedRecall });
   if (holdoutSearchContext.avgContextRecall < options.minNaturalHoldoutContextRecall) issues.push({ label: "natural_holdout", metric: "avgContextRecall", expected: `>= ${options.minNaturalHoldoutContextRecall}`, actual: holdoutSearchContext.avgContextRecall });
   if (holdoutSearchContext.forbiddenReadRate > 0) issues.push({ label: "natural_holdout", metric: "forbiddenReadRate", expected: "0", actual: holdoutSearchContext.forbiddenReadRate });
-  return { passed: issues.length === 0, issues };
+  return { passed: issues.length === 0, paired, issues };
 }
 
 function metricsForCohort(cohort: TaskCohort, cases: CaseReport[]): CohortReport {
