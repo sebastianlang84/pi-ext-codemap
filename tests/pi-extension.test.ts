@@ -222,13 +222,16 @@ test("registers only codemap tools with compact complete prompt guidance", () =>
     codemap_context: ["read-first", "indexed", "read substitute", "pathPrefix"],
   };
   const promptSurface = tools.map((tool) => [tool.promptSnippet, ...(tool.promptGuidelines ?? [])].join("\n")).join("\n");
-  assert.ok(promptSurface.length <= 1_000, `CodeMap prompt surface should stay compact, got ${promptSurface.length} chars`);
+  // Compactness guard, not a minimization target: raised 2026-07 (1000 -> 1500 total, 260 -> 560
+  // per tool) to fit explicit search-first / wrong-anchor guidance. Kept in step with the token
+  // budget in scripts/check-token-injection.ts.
+  assert.ok(promptSurface.length <= 1_500, `CodeMap prompt surface should stay compact, got ${promptSurface.length} chars`);
   for (const name of Object.keys(requiredTerms)) {
     const tool = tools.find((candidate) => candidate.name === name);
     assert.ok(tool?.promptSnippet, `${name} should provide promptSnippet`);
     assert.ok(tool?.promptGuidelines?.length, `${name} should provide promptGuidelines`);
     const prompt = [tool?.promptSnippet, ...(tool?.promptGuidelines ?? [])].join("\n");
-    assert.ok(prompt.length <= 260, `${name} prompt guidance should stay compact, got ${prompt.length} chars`);
+    assert.ok(prompt.length <= 560, `${name} prompt guidance should stay compact, got ${prompt.length} chars`);
     assert.ok(tool?.promptGuidelines?.every((guideline) => guideline.includes(name)), `${name} guidelines should name the tool`);
     for (const term of requiredTerms[name]) assert.ok(prompt.includes(term), `${name} prompt guidance should mention ${term}`);
   }

@@ -51,9 +51,15 @@ export interface TokenInjectionGate {
 
 const fieldNames: TokenInjectionFieldName[] = ["description", "parameters", "promptSnippet", "promptGuidelines"];
 
+// These are a guard against unbounded growth of the always-injected tool surface, not a hard
+// minimization target — clarity that measurably improves tool routing is worth the tokens. Raised
+// 2026-07 from 190/700 to give codemap_search / codemap_context room for explicit search-first and
+// wrong-anchor guidance (the behavioral signals the navigation benchmark showed matter). Set at the
+// measured footprint plus ~12% headroom; whether the richer wording pays off is settled by the
+// routing eval (experiments/agent-routing.episodes.md) — trim back if it does not.
 export const defaultTokenInjectionBudgets: TokenInjectionBudgets = {
-  maxTokensPerTool: 190,
-  maxTotalTokens: 700,
+  maxTokensPerTool: 300,
+  maxTotalTokens: 900,
 };
 
 export function estimateTokenInjectionTokens(text: string): number {
