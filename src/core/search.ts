@@ -2,7 +2,7 @@ import { openRepoDb } from "./db.ts";
 import { getRepoInfo, type StateOptions } from "./repo.ts";
 import { status } from "./indexer.ts";
 import { planQuery } from "./query-plan.ts";
-import { rankAndSlice, type SearchScoreDiagnostics } from "./ranking.ts";
+import { rankAndSlice, topHitConfidence, type SearchScoreDiagnostics, type TopHitConfidence } from "./ranking.ts";
 import { collectSearchCandidateDiagnostics, collectSearchCandidates, pathFilterForPrefix, type SearchCandidateDiagnostic, type SearchCandidateSource } from "./search-pipeline.ts";
 import { normalizePathPrefix } from "./scanner.ts";
 import type { SearchResult } from "./types.ts";
@@ -27,6 +27,7 @@ export interface CodeMapSearchPackage {
   deleted: number;
   warnings: string[];
   results: SearchResult[];
+  topHitConfidence: TopHitConfidence;
 }
 
 export type SearchCandidateDecision = "selected" | "outside_limit" | "deduped_lower_score" | "non_positive_score";
@@ -59,6 +60,7 @@ export function searchCodeMapWithDiagnostics(options: { query: string; cwd?: str
   // search, which dominates latency on large repos. Search staleness is advisory
   // (see promptGuidelines); the file-level stale scan stays behind codemap_status --full.
   const diagnostics = status(options.cwd, { health: "cheap", pathPrefix, stateDir: options.stateDir }) as SearchDiagnostics & { root: string };
+  const results = searchCodeMap({ ...options, pathPrefix });
   return {
     query: options.query,
     root: diagnostics.root,
@@ -69,7 +71,8 @@ export function searchCodeMapWithDiagnostics(options: { query: string; cwd?: str
     missing: diagnostics.missing ?? 0,
     deleted: diagnostics.deleted ?? 0,
     warnings: diagnostics.warnings ?? [],
-    results: searchCodeMap({ ...options, pathPrefix }),
+    results,
+    topHitConfidence: topHitConfidence(results),
   };
 }
 

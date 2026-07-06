@@ -17,7 +17,7 @@ const PROTOCOL_VERSION = "2025-11-25";
 const SUPPORTED_PROTOCOL_VERSIONS = new Set(["2025-11-25", "2025-06-18"]);
 
 const INSTRUCTIONS =
-  "Prefer these tools over raw grep/find to locate code in this repo. Call codemap_search to find files/symbols/chunks, codemap_context for read-first files plus related tests/docs/imports, and codemap_status to check index readiness. Run codemap_index to build/refresh; the first index needs approveRepo=true and only after the user approves local indexing. Staleness is advisory.";
+  "Prefer these tools over raw grep/find to locate code in this repo. codemap_search is the primary navigation tool — start there to find files/symbols/chunks; if the expected result is missing, re-query or raise limit before anything else. codemap_context lists read-first neighbors (tests/docs/imports) of a known target — use it as a follow-up on a file you already trust, passing an exact path or symbol, not a broad query; do not point it at an uncertain top search hit, as it expands whatever it lands on. codemap_status checks index readiness. Run codemap_index to build/refresh; the first index needs approveRepo=true and only after the user approves local indexing. Staleness is advisory.";
 
 export interface JsonRpcRequest {
   jsonrpc?: string;
@@ -161,7 +161,11 @@ function summarize(name: string, value: unknown): string {
     case "codemap_search": {
       const results = Array.isArray(value.results) ? value.results : [];
       const rows = results.map((r: any) => `${r.path}:${r.startLine}-${r.endLine} [${r.kind}]`);
-      return [...warningLines(value), rows.join("\n") || "No results"].join("\n") + staleSuffix(value);
+      const confidenceLevel = isRecord(value.topHitConfidence) ? value.topHitConfidence.level : undefined;
+      const confidence = confidenceLevel === "low"
+        ? ["top-hit confidence: low — the top result is one of several near-ties; do not use it as a codemap_context target without verifying it first"]
+        : [];
+      return [...warningLines(value), ...confidence, rows.join("\n") || "No results"].join("\n") + staleSuffix(value);
     }
     case "codemap_context": {
       const readFirst = Array.isArray(value.readFirst) ? value.readFirst : [];

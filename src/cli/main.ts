@@ -129,7 +129,10 @@ function runSearch(parsed: ParsedArgs, cwd: string): CliResult {
   const pkg = searchCodeMapWithDiagnostics({ query, cwd: resolveRepoCwd(cwd, parsed.repo), limit: parsed.limit, pathPrefix: parsed.pathPrefix, ...stateOptions });
   if (parsed.json) return ok(JSON.stringify(pkg, null, 2));
   const rows = pkg.results.map((r) => `${r.path}:${r.startLine}-${r.endLine} [${r.kind}]`);
-  return ok(`${rows.join("\n") || "No results"}${staleNote(pkg)}`);
+  const confidenceNote = pkg.topHitConfidence.level === "low"
+    ? "top-hit confidence: low — top result is one of several near-ties; verify before using as a codemap-context target\n"
+    : "";
+  return ok(`${confidenceNote}${rows.join("\n") || "No results"}${staleNote(pkg)}`);
 }
 
 function runContext(parsed: ParsedArgs, cwd: string): CliResult {

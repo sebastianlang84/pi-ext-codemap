@@ -133,6 +133,27 @@ export function rankAndSlice(results: SearchResult[], limit: number): SearchResu
     .slice(0, limit);
 }
 
+export type TopHitConfidenceLevel = "high" | "low" | "single" | "none";
+
+export interface TopHitConfidence {
+  level: TopHitConfidenceLevel;
+  /** Relative score gap between rank 1 and rank 2, (s0 - s1) / s0. 1 when only one hit. */
+  margin: number;
+}
+
+// How much the top search hit stands out from rank 2. A bunched cluster (small margin) means the
+// top hit is one of several near-ties, so anchoring codemap_context on it risks the wrong-anchor
+// failure mode (context expands whatever it lands on, crowding out correct lower-ranked hits). The
+// threshold is a first cut, meant to be calibrated by the routing eval.
+export function topHitConfidence(results: SearchResult[], lowMarginThreshold = 0.1): TopHitConfidence {
+  if (results.length === 0) return { level: "none", margin: 0 };
+  if (results.length === 1) return { level: "single", margin: 1 };
+  const top = results[0].score;
+  const second = results[1].score;
+  const margin = top > 0 ? (top - second) / top : 0;
+  return { level: margin >= lowMarginThreshold ? "high" : "low", margin };
+}
+
 export function fileRoleBoost(roles: string[], intents: string[]): number {
   if (roles.includes("implementation/main") && intents.includes("implementation/main")) return 24;
   if (roles.includes("setup/utility") && intents.includes("setup/utility")) return 22;
