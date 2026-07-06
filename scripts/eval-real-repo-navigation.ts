@@ -16,6 +16,7 @@ import {
   parsePositiveInteger,
   queryTerms,
   roundMs,
+  roundRate,
   stripScoreComponents,
   summarizeModeMetrics,
   timed,
