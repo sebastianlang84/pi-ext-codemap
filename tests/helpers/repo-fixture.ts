@@ -10,6 +10,10 @@ export function useIsolatedHome(prefix = "pi-codemap-home-"): string {
   const storageHome = mkdtempSync(join(tmpdir(), prefix));
   process.env.HOME = storageHome;
   process.env.USERPROFILE = storageHome;
+  // State resolution consults CODEMAP_HOME / XDG_DATA_HOME ahead of HOME (see resolveStateDir);
+  // leaving them set would let the suite escape this isolated home and pollute real user state.
+  delete process.env.CODEMAP_HOME;
+  delete process.env.XDG_DATA_HOME;
   after(() => rmSync(storageHome, { recursive: true, force: true }));
   return storageHome;
 }

@@ -20,16 +20,38 @@ function configuredStateDir(): string | undefined {
   return undefined;
 }
 
+function legacyStateDir(): string {
+  return join(homedir(), ".pi", "agent", "state", "codemap");
+}
+
 function defaultStateDir(): string {
-  const home = homedir();
-  const stateDir = join(home, ".local", "share", "codemap");
-  const legacyStateDir = join(home, ".pi", "agent", "state", "codemap");
-  return !existsSync(stateDir) && existsSync(legacyStateDir) ? legacyStateDir : stateDir;
+  const stateDir = join(homedir(), ".local", "share", "codemap");
+  const legacy = legacyStateDir();
+  return !existsSync(stateDir) && existsSync(legacy) ? legacy : stateDir;
+}
+
+let warnedLegacyStateAbandoned = false;
+
+// A configured override (CODEMAP_HOME / XDG_DATA_HOME) silently wins over the legacy Pi state dir.
+// An upgrading Pi user who happens to export XDG_DATA_HOME would land in a fresh empty location and
+// lose their approvals/indexes without notice — surface that once on stderr (never stdout, which the
+// MCP transport keeps JSON-pure) so it stays diagnosable but non-fatal.
+function warnIfLegacyStateAbandoned(chosen: string): void {
+  if (warnedLegacyStateAbandoned) return;
+  const legacy = legacyStateDir();
+  if (chosen === legacy || existsSync(chosen) || !existsSync(legacy)) return;
+  warnedLegacyStateAbandoned = true;
+  process.stderr.write(
+    `codemap: ignoring legacy Pi state at ${legacy}; using ${chosen}. ` +
+      `Pass --state-dir ${legacy} (or unset CODEMAP_HOME/XDG_DATA_HOME) to reuse it.\n`,
+  );
 }
 
 export function resolveStateDir(stateDir?: string): string {
   if (stateDir) return resolve(stateDir);
-  return configuredStateDir() ?? defaultStateDir();
+  const chosen = configuredStateDir() ?? defaultStateDir();
+  warnIfLegacyStateAbandoned(chosen);
+  return chosen;
 }
 
 export function getReposDir(options: StateOptions = {}): string {

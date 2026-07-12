@@ -60,6 +60,12 @@ check("production JavaScript build completes", () => {
   run("npm", ["run", "build"]);
 });
 
+check("committed dist/ matches a fresh build", () => {
+  // bin points at tracked dist/ so `npm i -g github:…` works without a prepare step; the build above
+  // just regenerated it. Any drift here means src/ changed without the rebuilt dist being committed.
+  run("git", ["diff", "--exit-code", "--", "dist"]);
+});
+
 check("Pi extension entries exist and import", () => {
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const entries = pkg.pi?.extensions ?? [];

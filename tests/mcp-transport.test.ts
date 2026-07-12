@@ -13,11 +13,14 @@ const binPath = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "mcp"
 function runTransport(lines: string[], cwd?: string): { stdout: string; parsed: any[] } {
   const home = mkdtempSync(join(tmpdir(), "pi-codemap-mcp-home-"));
   try {
+    // CODEMAP_HOME / XDG_DATA_HOME take precedence over HOME in state resolution, so the child would
+    // touch real CodeMap state if they leaked through from the parent env; strip them to stay isolated.
+    const { CODEMAP_HOME, XDG_DATA_HOME, ...parentEnv } = process.env;
     const res = spawnSync(process.execPath, [binPath], {
       input: lines.map((line) => `${line}\n`).join(""),
       encoding: "utf8",
       cwd: cwd ?? home,
-      env: { ...process.env, HOME: home, USERPROFILE: home },
+      env: { ...parentEnv, HOME: home, USERPROFILE: home },
     });
     const stdout = res.stdout ?? "";
     const parsed = stdout.split("\n").filter((line) => line.length > 0).map((line) => JSON.parse(line));

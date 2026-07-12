@@ -3,12 +3,13 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import test, { after, type TestContext } from "node:test";
+import test, { type TestContext } from "node:test";
 
-const storageHome = mkdtempSync(join(tmpdir(), "pi-codemap-quality-home-"));
-process.env.HOME = storageHome;
-process.env.USERPROFILE = storageHome;
-after(() => rmSync(storageHome, { recursive: true, force: true }));
+import { useIsolatedHome } from "./helpers/repo-fixture.ts";
+
+// Routes through the shared isolator so state resolution (which also honors CODEMAP_HOME /
+// XDG_DATA_HOME) cannot escape into real CodeMap state when those vars are set in the environment.
+useIsolatedHome("pi-codemap-quality-home-");
 
 const { indexRepo } = await import("../src/core/indexer.ts");
 const { searchCodeMap } = await import("../src/core/search.ts");
