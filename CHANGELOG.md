@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Silence the one-line `node:sqlite` `ExperimentalWarning` on the `codemap` CLI (via a `--disable-warning=ExperimentalWarning` shebang flag) so shell/agent callers get clean stderr; stdout JSON is unaffected and the `codemap-mcp` server keeps its default shebang.
+- Add a deferred-tool hint to the MCP server instructions: hosts that list the `codemap_*` tools without preloading their schemas should load them before the first call, or drive the `codemap` CLI directly, so the ranked-navigation path is not lost to a schema round-trip.
+
 ## 0.9.0 - 2026-07-12
 
 - Reframe the project from Pi-first `pi-ext-codemap` to CLI-first CodeMap at `sebastianlang84/codemap`: rename the package to `@sebastianlang84/codemap`, ship versioned built JavaScript for compiler-free `codemap` and `codemap-mcp` installs, and keep MCP and Pi as adapters over the shared operations. Pi peer dependencies are optional for CLI/MCP users.
