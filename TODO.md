@@ -84,7 +84,10 @@ Diese Lücken sind bewusst festgehalten: Evals sollen nicht nur bestehen, sonder
    - Entscheidung: LLM-gesteuertes Refresh über bestehende stale Warnungen genügt vorerst; kein Command/Hook als nächster Slice.
    - Wieder aufnehmen, wenn breitere Modelle/Runs scheitern oder Praxis zeigt, dass Agenten stale Warnungen übersehen.
 
-5. [ ] Kanonische Token-Read-Zahlen in die README-Benchmarks aufnehmen.
-   - Befund: `avgBytesRead`/`estTokensRead` sind in beiden Navigation-Evals implementiert; ein Full-Suite-Lauf braucht aber alle fünf lokalen Real-Repos, die nicht auf jeder Maschine vorhanden sind.
-   - Aufgabe: `eval:real-repo-navigation:gate` auf einer Maschine mit vollständigem Suite-Satz laufen lassen und die kanonische Token-Ersparnis (search+context vs. lexical) als Spalte/Zeile in die README-Benchmark-Tabelle übernehmen.
-   - Regel: keine Token-Zahlen aus Teilmengen in die README schreiben.
+5. [x] Kanonische Token-Read-Zahlen in die README-Benchmarks aufnehmen.
+   - Erledigt (2026-07-12): Full-Suite-Lauf über alle fünf lokalen Real-Repos; die Read-Cost-Tabelle in `README.md` zeigt jetzt est-tokens-read pro Modus (lexical ~51,8k vs. search/context ~11,4–11,6k, ~4,5× weniger), datiert und als eigener Abschnitt statt in den 2026-05-24-Snapshot gemischt.
+
+6. [ ] Erfolgs-/Recall-Baseline im README auf aktuellen Repo-Stand re-baselinen (entscheiden).
+   - Befund (2026-07-12): Derselbe Full-Suite-Lauf zeigt gegenüber dem datierten 2026-05-24-Snapshot gedriftete Zahlen (Baseline `codemap_search_context` Success 0.75 statt 1.000; Natural-Holdout 0.625 statt 0.750), weil sich die fünf lokalen Real-Repos verändert haben. Der `eval:real-repo-navigation:gate` besteht weiter (kein Regressions-Gate-Bruch). Ein gedrifteter Holdout-Fall war Fixture-Rot durch Rename (`reviewer-context-scout*` → `reviewer-scout*`, in `scripts/eval-real-repo-navigation.ts` gefixt); die übrigen Misses sind echte Konventions-Nachbar-Grenzen (H2).
+   - Offen: Produktentscheidung, ob die datierte Benchmark-Tabelle + Prosa („gets it right every time") auf einen neuen datierten Cohort aktualisiert werden soll. Nicht eigenmächtig, weil es Headline-Claims senkt.
+   - Regel: keine Token-/Erfolgszahlen aus Teilmengen in die README schreiben; Cohorts immer datieren.

@@ -52,6 +52,8 @@ claude mcp add codemap -- codemap-mcp
 
 Other hosts can use the equivalent command-based MCP configuration shown in the [README](../../README.md#as-an-mcp-server-native-tools-in-claude-code-codex-cursor).
 
+Note: some hosts *defer* MCP tools — they list a tool by name but load its schema only on demand, so the agent must take an extra step before the first call, and the server's instructions are injected every session. In those harnesses the plain `codemap` CLI over Bash is the leaner path (one call, no schema round-trip, nothing injected); prefer it there and skip the MCP registration.
+
 ### Pi extension
 
 ```bash

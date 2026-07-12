@@ -54,6 +54,8 @@ Baseline cohort (2026-05-24):
 - *Expected recall* = share of the entry + required context files actually read.
 - *Context recall* = share of just the required neighboring files (tests, config, docs, imports) read.
 
+> These success/recall figures are a **dated snapshot (2026-05-24)**. The suite runs against evolving real repositories, so a later rerun on the same five repos scores somewhat lower as those repos grow more convention-linked neighbors (tests/docs/related sources not reachable by a direct import or symbol) — a known limitation, not a code regression; the quality gate still passes. The read-cost figures below are a separate, freshly dated measurement.
+
 ### What this means in plain terms
 
 Give an agent five files' worth of attention and point it at a real task:
@@ -65,6 +67,18 @@ Give an agent five files' worth of attention and point it at a real task:
 Put differently: against a grep-like baseline, the intended workflow turns "found roughly half of what I needed, and only rarely everything" into "found exactly what I needed" — **without spending a larger reading budget**. That is the concrete payoff for an agent: fewer speculative reads and tool calls before it can start real work.
 
 The gain holds on a deliberately harder **natural-language holdout** (symptom-style queries with no function/class names to grep for), where grep-style search succeeds on ~1 in 16 tasks (0.063) and the full workflow on ~3 in 4 (0.750) — smaller, but the same direction, and honest about where lexical search falls off hardest.
+
+### Read cost
+
+Success and recall say whether the agent found the right files; the same eval also measures how many bytes/tokens it *read* to get there, under the identical 5-file budget. Full local suite, 2026-07-12 (est. tokens read across all cases):
+
+| Mode | Est. tokens read | vs. lexical |
+|---|---:|---:|
+| `lexical` (grep/rg-like) | ~51,800 | 1.0× |
+| `codemap_search` | ~11,600 | **~4.5× fewer** |
+| `codemap_search_context` | ~11,400 | **~4.5× fewer** |
+
+Because ranked search points the agent at the *right* files, it spends its 5-file budget on small, relevant sources instead of large speculative reads — roughly a 4–5× cut in tokens read for the same number of files. The ratio holds per cohort (baseline ~53.9k→12.3k, natural holdout ~50.7k→11.0k). This is the concrete token payoff behind the success/recall numbers above.
 
 These numbers are reproducible locally and gated in CI-style checks:
 
@@ -137,7 +151,7 @@ Any MCP host (Codex, Cursor, …) via config:
 }
 ```
 
-The server operates on the directory it is launched in. Most hosts (e.g. Claude Code) start MCP servers in the project directory; if yours does not, pass `repoPath` in the tool call (or the agent will see `readiness: not a git repository`). The agent gets `codemap_status`, `codemap_search`, `codemap_context`, and `codemap_index` (call `codemap_index` with `approveRepo: true` once to approve local indexing). This is the alternative to the CLI-plus-`AGENTS.md` route: use MCP when you want first-class, self-served tools; use the CLI when you want an explicit, scriptable command.
+The server operates on the directory it is launched in. Most hosts (e.g. Claude Code) start MCP servers in the project directory; if yours does not, pass `repoPath` in the tool call (or the agent will see `readiness: not a git repository`). The agent gets `codemap_status`, `codemap_search`, `codemap_context`, and `codemap_index` (call `codemap_index` with `approveRepo: true` once to approve local indexing). This is the alternative to the CLI-plus-`AGENTS.md` route: use MCP when you want first-class, self-served tools; use the CLI when you want an explicit, scriptable command. One caveat: if your host *defers* MCP tools (lists them by name but loads schemas on demand, e.g. some large tool inventories in Claude Code), the agent pays an extra step before the first call and the server's instructions are injected every session — there the CLI-plus-`AGENTS.md` route is leaner, so prefer it and skip the MCP registration.
 
 ### As a Pi extension
 
