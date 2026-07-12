@@ -321,8 +321,8 @@ const defaultSuites: RealRepoSuite[] = [
         name: "NL holdout reviewer scout recursion guard",
         cohort: "natural_holdout",
         query: "reviewer context scout should gather bounded contract and nearby test evidence without scout recursion",
-        entry: "docs/plans/reviewer-context-scout.md",
-        requiredContext: ["docs/benchmarks/reviewer-context-scout-fixtures.json", "tests/reviewer-context-scout-benchmark.test.mjs"],
+        entry: "docs/plans/reviewer-scout.md",
+        requiredContext: ["docs/benchmarks/reviewer-scout-fixtures.json", "tests/reviewer-scout-benchmark.test.mjs"],
         forbidden: ["docs/plans/fanout-reduce.md"],
       },
       {
