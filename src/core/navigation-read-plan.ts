@@ -4,6 +4,8 @@ type ContextPathInput = string | { path: string; reasons?: Array<{ kind: string;
 
 type ReadPlanBucket =
   | "first_search"
+  | "visible_search_pair"
+  | "uncovered_visible_test"
   | "route_direct_import"
   | "route_direct_import_test"
   | "prioritized_config"
@@ -84,9 +86,16 @@ function buildSearchContextReadPlan(searchPaths: string[], contextPaths: Context
   const cappedLimit = Math.max(0, Math.floor(limit));
   if (cappedLimit === 0) return { limit: cappedLimit, selected: [], entries: [], contextByPath: new Map(), searchRankByPath: rankedPathMap(searchPaths) };
   const contextEntries = contextPaths.map((item, index) => toContextEntry(item, index + 1)).filter((item) => item.path);
+  const contextByPath = new Map(contextEntries.map((item) => [item.path, item]));
   const [firstSearchPath, ...laterSearchPaths] = searchPaths;
   const searchPathSet = new Set(searchPaths);
   const searchRankByPath = rankedPathMap(searchPaths);
+  const visibleSearchPairPaths = laterSearchPaths.filter((path) => hasUncoveredVisibleSourceTestPair(path, laterSearchPaths, contextByPath));
+  const uncoveredVisibleTests = laterSearchPaths.filter((path) => (
+    isTestPath(path)
+    && !isContextBackedSearchHit(contextByPath.get(path))
+    && !hasVisibleSourceTestCounterpart(path, laterSearchPaths)
+  ));
   const routeAdapterEntry = isRouteAdapterPath(firstSearchPath ?? "");
   const prioritizedConfigs = contextEntries.filter((item) => isRelatedConfig(item) && !searchPathSet.has(item.path));
   const prioritizedTests = contextEntries.filter((item) => isRelatedTest(item, searchPathSet) && !searchPathSet.has(item.path));
@@ -103,13 +112,14 @@ function buildSearchContextReadPlan(searchPaths: string[], contextPaths: Context
     : [];
   const prioritizedContext = [...prioritizedConfigs, ...prioritizedTests, ...prioritizedDirectImports, ...prioritizedDirectImportTests];
   const remainingContext = contextEntries.filter((item) => !prioritizedContext.some((priority) => priority.path === item.path));
-  const contextByPath = new Map(contextEntries.map((item) => [item.path, item]));
   const contextBackedSearchPaths = laterSearchPaths.filter((path) => isContextBackedSearchHit(contextByPath.get(path)));
   const remainingSearchPaths = laterSearchPaths.filter((path) => !contextBackedSearchPaths.includes(path));
   const activeSearchPaths = remainingSearchPaths.filter((path) => !isArchivedDocumentationPath(path));
   const archivedSearchPaths = remainingSearchPaths.filter(isArchivedDocumentationPath);
   const entries = uniqueEntries([
     entry(firstSearchPath, "first_search"),
+    ...visibleSearchPairPaths.map((path) => entry(path, "visible_search_pair")),
+    ...uncoveredVisibleTests.map((path) => entry(path, "uncovered_visible_test")),
     ...(routeAdapterEntry ? prioritizedDirectImports.map((item) => entry(item.path, "route_direct_import")) : []),
     ...(routeAdapterEntry ? prioritizedDirectImportTests.map((item) => entry(item.path, "route_direct_import_test")) : []),
     ...(routeAdapterEntry ? [] : prioritizedConfigs.map((item) => entry(item.path, "prioritized_config"))),
@@ -169,6 +179,29 @@ function isContextBackedSearchHit(item: { path: string; reasons: string[] } | un
 
 function isDocumentationPath(path: string): boolean {
   return /\.(?:md|mdx|rst|txt)$/i.test(path);
+}
+
+function hasUncoveredVisibleSourceTestPair(path: string, searchPaths: string[], contextByPath: Map<string, ContextEntry>): boolean {
+  const testPath = isTestPath(path);
+  return !isContextBackedSearchHit(contextByPath.get(path)) && searchPaths.some((candidate) => (
+    candidate !== path
+    && isTestPath(candidate) !== testPath
+    && pathStem(candidate) === pathStem(path)
+    && !isContextBackedSearchHit(contextByPath.get(candidate))
+  ));
+}
+
+function hasVisibleSourceTestCounterpart(testPath: string, searchPaths: string[]): boolean {
+  return searchPaths.some((candidate) => candidate !== testPath && !isTestPath(candidate) && pathStem(candidate) === pathStem(testPath));
+}
+
+function isTestPath(path: string): boolean {
+  return /(?:^|\/)(?:__tests__|tests?|specs?)(?:\/|$)|\.(?:test|spec)\./i.test(path);
+}
+
+function pathStem(path: string): string {
+  const filename = path.split("/").pop()?.toLowerCase() ?? path.toLowerCase();
+  return filename.replace(/\.(?:test|spec)(?=\.)/i, "").replace(/\.[^.]+$/, "");
 }
 
 function isRouteAdapterPath(path: string): boolean {

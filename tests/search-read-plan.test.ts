@@ -185,3 +185,61 @@ test("search+context read plan does not promote sibling tests for non-search imp
     ["src/pi-extension/retrieval.ts", "docs/adr/005-simplified-agent-facing-scopes.md", "docs/adr/006-normal-and-advanced-tool-surface.md"],
   );
 });
+
+test("search+context read plan preserves a visible source-test pair when context targets the wrong top hit", () => {
+  assert.deepEqual(
+    mergeSearchContextReadPlan(
+      [
+        "src/pi-extension/handoffs.ts",
+        "CHANGELOG.md",
+        "src/pi-extension/commands.ts",
+        "src/pi-extension/retrieval.ts",
+        "test/pi-extension/retrieval.test.ts",
+      ],
+      [
+        { path: "src/pi-extension/handoffs.ts", reasons: [{ kind: "target" }] },
+        { path: "src/core/index.ts", reasons: [{ kind: "import" }] },
+        { path: "test/pi-extension/commands.test.ts", reasons: [{ kind: "sibling_test", targetPath: "src/pi-extension/handoffs.ts" }] },
+        { path: "src/pi-extension/commands.ts", reasons: [{ kind: "reverse_import" }] },
+        { path: "src/pi-extension/config.ts", reasons: [{ kind: "near_config" }] },
+      ],
+      5,
+    ),
+    [
+      "src/pi-extension/handoffs.ts",
+      "src/pi-extension/retrieval.ts",
+      "test/pi-extension/retrieval.test.ts",
+      "test/pi-extension/commands.test.ts",
+      "src/pi-extension/commands.ts",
+    ],
+  );
+});
+
+test("search+context read plan preserves an uncovered visible test when context targets a different feature", () => {
+  assert.deepEqual(
+    mergeSearchContextReadPlan(
+      [
+        "apps/web/src/lib/regime-score.ts",
+        "apps/web/src/lib/regime-score-validation.ts",
+        "apps/web/src/types/macro.ts",
+        "docs/plans/architecture-review.md",
+        "apps/web/src/lib/__tests__/macro-derivations.test.ts",
+      ],
+      [
+        { path: "apps/web/src/lib/regime-score.ts", reasons: [{ kind: "target" }] },
+        { path: "apps/web/src/lib/stats.ts", reasons: [{ kind: "import" }] },
+        { path: "apps/web/src/types/macro.ts", reasons: [{ kind: "import" }] },
+        { path: "apps/web/src/lib/__tests__/regime-score-validation.test.ts", reasons: [{ kind: "sibling_test", targetPath: "apps/web/src/lib/regime-score.ts" }] },
+        { path: "apps/web/src/lib/__tests__/regime-score.test.ts", reasons: [{ kind: "reverse_test" }] },
+      ],
+      5,
+    ),
+    [
+      "apps/web/src/lib/regime-score.ts",
+      "apps/web/src/lib/__tests__/macro-derivations.test.ts",
+      "apps/web/src/lib/__tests__/regime-score-validation.test.ts",
+      "apps/web/src/lib/__tests__/regime-score.test.ts",
+      "apps/web/src/lib/regime-score-validation.ts",
+    ],
+  );
+});

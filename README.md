@@ -42,43 +42,43 @@ The claims above are measured, not asserted. The strongest evidence is the local
 - **`codemap_search`** — read only CodeMap's top ranked search hits.
 - **`codemap_search_context`** — the intended workflow: search for an entry point, then call `codemap_context` on the top hit to pull in its related files, all within the same 5-file budget.
 
-Baseline cohort (2026-05-24):
+Baseline cohort (full local suite, 2026-07-14):
 
 | Mode | Success | Expected recall | Context recall | Avg files read |
 |---|---:|---:|---:|---:|
-| `lexical` (grep/rg-like) | 0.125 | 0.521 | 0.563 | 5.0 |
-| `codemap_search` | 0.375 | 0.781 | 0.646 | 4.9 |
-| `codemap_search_context` | **1.000** | **1.000** | **1.000** | 5.0 |
+| `lexical` (grep/rg-like) | 0.125 | 0.448 | 0.521 | 5.0 |
+| `codemap_search` | 0.500 | 0.823 | 0.708 | 4.9 |
+| `codemap_search_context` | **0.750** | **0.927** | **0.896** | 5.0 |
 
 - *Success* = found the right entry file **and** all required neighbors **and** read no forbidden/noisy file.
 - *Expected recall* = share of the entry + required context files actually read.
 - *Context recall* = share of just the required neighboring files (tests, config, docs, imports) read.
 
-> These success/recall figures are a **dated snapshot (2026-05-24)**. The suite runs against evolving real repositories, so a later rerun on the same five repos scores somewhat lower as those repos grow more convention-linked neighbors (tests/docs/related sources not reachable by a direct import or symbol) — a known limitation, not a code regression; the quality gate still passes. The read-cost figures below are a separate, freshly dated measurement.
+> These are a **dated local snapshot**, not a universal accuracy claim. The five evaluated repositories evolve independently, so reruns can expose new convention-linked neighbors or stale ground truth. The 2026-07-14 run passed the local quality gate with 6 search+context wins, 0 losses, and 18 ties against search-only across all 24 paired cases.
 
 ### What this means in plain terms
 
 Give an agent five files' worth of attention and point it at a real task:
 
-- **Plain grep-style search gets it fully right about 1 in 8 times** (success 0.125). It often lands somewhere in the neighborhood — roughly half the right files (recall ~0.52–0.56) — but rarely assembles the *complete* picture, and it wastes part of the budget on noisy hits.
-- **CodeMap's ranked search alone triples that** (success 0.375) and reads fewer files to do it, because the ranking pushes the real target up instead of burying it under keyword matches.
-- **The full search-then-context workflow gets it right every time on this set** (success 1.000) using the *same* five-file budget — it doesn't read *more*, it reads the *right* files: the entry point plus the tests, config, and imports you'd otherwise have to hunt down by hand.
+- **Plain grep-style search gets it fully right about 1 in 8 times** (success 0.125). It lands on roughly half the required files (recall ~0.45–0.52) and frequently spends budget on noisy hits.
+- **CodeMap's ranked search alone reaches 1 in 2 tasks** (success 0.500) and raises expected recall to 0.823 by pushing likely targets above keyword noise.
+- **The full search-then-context workflow reaches 3 in 4 tasks** (success 0.750) with 0.927 expected recall and no forbidden reads in this cohort, using the same five-file budget.
 
-Put differently: against a grep-like baseline, the intended workflow turns "found roughly half of what I needed, and only rarely everything" into "found exactly what I needed" — **without spending a larger reading budget**. That is the concrete payoff for an agent: fewer speculative reads and tool calls before it can start real work.
+Put differently: against the grep-like baseline, the intended workflow improves complete-task success by 0.625 and expected recall by 0.479 — **without spending a larger reading budget**. It still has visible misses, but substantially reduces speculative reads before an agent can start real work.
 
-The gain holds on a deliberately harder **natural-language holdout** (symptom-style queries with no function/class names to grep for), where grep-style search succeeds on ~1 in 16 tasks (0.063) and the full workflow on ~3 in 4 (0.750) — smaller, but the same direction, and honest about where lexical search falls off hardest.
+The gain also holds on the deliberately harder 16-task **natural-language holdout** (symptom-style queries with no function/class names to grep for): grep-style search succeeds on 0.125 of tasks and the full workflow on 0.688, with 0.823 expected recall and 0.812 context recall. Search+context has no paired losses or forbidden reads in the current run.
 
 ### Read cost
 
-Success and recall say whether the agent found the right files; the same eval also measures how many bytes/tokens it *read* to get there, under the identical 5-file budget. Full local suite, 2026-07-12 (est. tokens read across all cases):
+Success and recall say whether the agent found the right files; the same eval also measures how many bytes/tokens it *read* to get there, under the identical 5-file budget. Full local suite, 2026-07-14 (weighted estimate across all 24 cases):
 
 | Mode | Est. tokens read | vs. lexical |
 |---|---:|---:|
 | `lexical` (grep/rg-like) | ~51,800 | 1.0× |
 | `codemap_search` | ~11,600 | **~4.5× fewer** |
-| `codemap_search_context` | ~11,400 | **~4.5× fewer** |
+| `codemap_search_context` | ~11,200 | **~4.6× fewer** |
 
-Because ranked search points the agent at the *right* files, it spends its 5-file budget on small, relevant sources instead of large speculative reads — roughly a 4–5× cut in tokens read for the same number of files. The ratio holds per cohort (baseline ~53.9k→12.3k, natural holdout ~50.7k→11.0k). This is the concrete token payoff behind the success/recall numbers above.
+Because ranked search points the agent at the *right* files, it spends its 5-file budget on small, relevant sources instead of large speculative reads — roughly a 4–5× cut in tokens read for the same number of files. The ratio holds per cohort (baseline ~53.9k→12.1–13.0k, natural holdout ~50.7k→10.8–10.9k). This is the concrete token payoff behind the success/recall numbers above.
 
 These numbers are reproducible locally and gated in CI-style checks:
 

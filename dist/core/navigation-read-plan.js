@@ -32,9 +32,14 @@ function buildSearchContextReadPlan(searchPaths, contextPaths, limit) {
     if (cappedLimit === 0)
         return { limit: cappedLimit, selected: [], entries: [], contextByPath: new Map(), searchRankByPath: rankedPathMap(searchPaths) };
     const contextEntries = contextPaths.map((item, index) => toContextEntry(item, index + 1)).filter((item) => item.path);
+    const contextByPath = new Map(contextEntries.map((item) => [item.path, item]));
     const [firstSearchPath, ...laterSearchPaths] = searchPaths;
     const searchPathSet = new Set(searchPaths);
     const searchRankByPath = rankedPathMap(searchPaths);
+    const visibleSearchPairPaths = laterSearchPaths.filter((path) => hasUncoveredVisibleSourceTestPair(path, laterSearchPaths, contextByPath));
+    const uncoveredVisibleTests = laterSearchPaths.filter((path) => (isTestPath(path)
+        && !isContextBackedSearchHit(contextByPath.get(path))
+        && !hasVisibleSourceTestCounterpart(path, laterSearchPaths)));
     const routeAdapterEntry = isRouteAdapterPath(firstSearchPath ?? "");
     const prioritizedConfigs = contextEntries.filter((item) => isRelatedConfig(item) && !searchPathSet.has(item.path));
     const prioritizedTests = contextEntries.filter((item) => isRelatedTest(item, searchPathSet) && !searchPathSet.has(item.path));
@@ -51,13 +56,14 @@ function buildSearchContextReadPlan(searchPaths, contextPaths, limit) {
         : [];
     const prioritizedContext = [...prioritizedConfigs, ...prioritizedTests, ...prioritizedDirectImports, ...prioritizedDirectImportTests];
     const remainingContext = contextEntries.filter((item) => !prioritizedContext.some((priority) => priority.path === item.path));
-    const contextByPath = new Map(contextEntries.map((item) => [item.path, item]));
     const contextBackedSearchPaths = laterSearchPaths.filter((path) => isContextBackedSearchHit(contextByPath.get(path)));
     const remainingSearchPaths = laterSearchPaths.filter((path) => !contextBackedSearchPaths.includes(path));
     const activeSearchPaths = remainingSearchPaths.filter((path) => !isArchivedDocumentationPath(path));
     const archivedSearchPaths = remainingSearchPaths.filter(isArchivedDocumentationPath);
     const entries = uniqueEntries([
         entry(firstSearchPath, "first_search"),
+        ...visibleSearchPairPaths.map((path) => entry(path, "visible_search_pair")),
+        ...uncoveredVisibleTests.map((path) => entry(path, "uncovered_visible_test")),
         ...(routeAdapterEntry ? prioritizedDirectImports.map((item) => entry(item.path, "route_direct_import")) : []),
         ...(routeAdapterEntry ? prioritizedDirectImportTests.map((item) => entry(item.path, "route_direct_import_test")) : []),
         ...(routeAdapterEntry ? [] : prioritizedConfigs.map((item) => entry(item.path, "prioritized_config"))),
@@ -107,6 +113,23 @@ function isContextBackedSearchHit(item) {
 }
 function isDocumentationPath(path) {
     return /\.(?:md|mdx|rst|txt)$/i.test(path);
+}
+function hasUncoveredVisibleSourceTestPair(path, searchPaths, contextByPath) {
+    const testPath = isTestPath(path);
+    return !isContextBackedSearchHit(contextByPath.get(path)) && searchPaths.some((candidate) => (candidate !== path
+        && isTestPath(candidate) !== testPath
+        && pathStem(candidate) === pathStem(path)
+        && !isContextBackedSearchHit(contextByPath.get(candidate))));
+}
+function hasVisibleSourceTestCounterpart(testPath, searchPaths) {
+    return searchPaths.some((candidate) => candidate !== testPath && !isTestPath(candidate) && pathStem(candidate) === pathStem(testPath));
+}
+function isTestPath(path) {
+    return /(?:^|\/)(?:__tests__|tests?|specs?)(?:\/|$)|\.(?:test|spec)\./i.test(path);
+}
+function pathStem(path) {
+    const filename = path.split("/").pop()?.toLowerCase() ?? path.toLowerCase();
+    return filename.replace(/\.(?:test|spec)(?=\.)/i, "").replace(/\.[^.]+$/, "");
 }
 function isRouteAdapterPath(path) {
     return /(?:^|\/)app\/api\/.+\/route\.[cm]?[jt]sx?$/i.test(path);
