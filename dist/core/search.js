@@ -29,7 +29,7 @@ export function searchCodeMapWithDiagnostics(options) {
 export function searchCodeMap(options) {
     const info = getRepoInfo(options.cwd, { stateDir: options.stateDir });
     if (!info.approved)
-        throw new Error("Repository is not approved/indexed yet.");
+        throw new Error("Repository is not approved/indexed yet. Run 'codemap index --approve' first (indexing is local-only; your repo is never modified).");
     const db = openRepoDb(info.dbPath);
     const limit = normalizedLimit(options.limit);
     const plan = planQuery(options.query);
@@ -45,7 +45,7 @@ export function searchCodeMap(options) {
 export function searchCodeMapDebug(options) {
     const info = getRepoInfo(options.cwd, { stateDir: options.stateDir });
     if (!info.approved)
-        throw new Error("Repository is not approved/indexed yet.");
+        throw new Error("Repository is not approved/indexed yet. Run 'codemap index --approve' first (indexing is local-only; your repo is never modified).");
     const db = openRepoDb(info.dbPath);
     const limit = normalizedLimit(options.limit);
     const plan = planQuery(options.query);

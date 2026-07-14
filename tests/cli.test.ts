@@ -38,7 +38,7 @@ test("cli index/search/context/status round-trip on an isolated state dir", (t) 
 
   const search = runCli(["search", "renderWidget", "--state-dir", stateDir], io);
   assert.equal(search.code, 0);
-  assert.match(search.out, /src\/widget\.ts:\d+-\d+ \[function\]/);
+  assert.match(search.out, /src\/widget\.ts:\d+(-\d+)? \[function\] .+ — [\d.]+/);
 
   const context = runCli(["context", "src/widget.ts", "--state-dir", stateDir], io);
   assert.equal(context.code, 0);

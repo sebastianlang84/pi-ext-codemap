@@ -22,19 +22,19 @@ const registryPath = join(defaultStateDir(), "registry.sqlite");
 const dbPath = join(defaultStateDir(), "repos", `${key}.sqlite`);
 
 if (!isApproved(registryPath, key)) {
-  console.error("Repository is not approved/indexed yet. Run codemap_index first; this report is read-only and does not create registry state.");
+  console.error("Repository is not approved/indexed yet. Run 'codemap index --approve' first; this report is read-only and does not create registry state.");
   process.exit(2);
 }
 
 if (!existsSync(dbPath)) {
-  console.error("CodeMap DB does not exist. Run codemap_index first; this report is read-only and does not index.");
+  console.error("CodeMap DB does not exist. Run 'codemap index --approve' first; this report is read-only and does not index.");
   process.exit(2);
 }
 
 const db = new DatabaseSync(dbPath, { readOnly: true });
 try {
   if (!hasGraphMetadata(db)) {
-    console.error("CodeMap graph metadata is missing or stale. Run codemap_index first; this report is read-only and does not migrate or index.");
+    console.error("CodeMap graph metadata is missing or stale. Run 'codemap index --approve' first; this report is read-only and does not migrate or index.");
     process.exit(2);
   }
   const pathFilter = parsed.pathPrefix ? `${escapeLike(parsed.pathPrefix)}%` : "%";

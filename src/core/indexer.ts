@@ -9,7 +9,7 @@ import type { IndexStats } from "./types.ts";
 export function indexRepo(options: { cwd?: string; approve?: boolean; pathPrefix?: string } & StateOptions = {}): IndexStats & { dbPath: string; root: string; pathPrefix: string } {
   const stateOptions = { stateDir: options.stateDir };
   const info = options.approve ? approveRepo(options.cwd, "codemap_index", stateOptions) : getRepoInfo(options.cwd, stateOptions);
-  if (!info.approved) throw new Error("Repository is not approved. Run codemap_index with approveRepo: true first.");
+  if (!info.approved) throw new Error("Repository is not approved. Run 'codemap index --approve' first (indexing is local-only; your repo is never modified).");
   const pathPrefix = normalizePathPrefix(options.pathPrefix);
   const db = openRepoDb(info.dbPath);
   // Skip re-reading+hashing unchanged files (mtime+size match) unless an index-version bump forces a

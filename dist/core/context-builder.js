@@ -9,7 +9,7 @@ import { escapeLike, localityScore, uniqueStrings } from "./text-util.js";
 export function buildCodeMapContext(options) {
     const info = getRepoInfo(options.cwd, { stateDir: options.stateDir });
     if (!info.approved)
-        throw new Error("Repository is not approved/indexed yet.");
+        throw new Error("Repository is not approved/indexed yet. Run 'codemap index --approve' first (indexing is local-only; your repo is never modified).");
     const db = openRepoDb(info.dbPath);
     try {
         const request = normalizeContextRequest(options);

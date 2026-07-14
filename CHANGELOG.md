@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Point `codemap` CLI users to `codemap index --approve` in the not-approved / not-indexed errors (search, context, index, and the architecture report) instead of the stale MCP `codemap_index` / `approveRepo` wording, and state that indexing is local-only and never modifies the repo.
+- Show the first matched line and score of each hit in `codemap search` human output (one line per hit; JSON output unchanged) so ranked results carry the same at-a-glance signal as a grep line.
 - Silence the one-line `node:sqlite` `ExperimentalWarning` on the `codemap` CLI (via a `--disable-warning=ExperimentalWarning` shebang flag) so shell/agent callers get clean stderr; stdout JSON is unaffected and the `codemap-mcp` server keeps its default shebang.
 - Add a deferred-tool hint to the MCP server instructions: hosts that list the `codemap_*` tools without preloading their schemas should load them before the first call, or drive the `codemap` CLI directly, so the ranked-navigation path is not lost to a schema round-trip.
 

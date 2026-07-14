@@ -136,7 +136,12 @@ function runSearch(parsed: ParsedArgs, cwd: string): CliResult {
     stateDir: parsed.stateDir,
   });
   if (parsed.json) return ok(JSON.stringify(pkg, null, 2));
-  const rows = pkg.results.map((r) => `${r.path}:${r.startLine}-${r.endLine} [${r.kind}]`);
+  const rows = pkg.results.map((r) => {
+    const loc = r.startLine === r.endLine ? `${r.startLine}` : `${r.startLine}-${r.endLine}`;
+    const snippet = r.snippet.split("\n")[0].trim();
+    const snippetPart = snippet ? ` ${snippet}` : "";
+    return `${r.path}:${loc} [${r.kind}]${snippetPart} — ${r.score}`;
+  });
   const confidenceNote = pkg.topHitConfidence.level === "low"
     ? "top-hit confidence: low — top result is one of several near-ties; verify before using as a codemap-context target\n"
     : "";
