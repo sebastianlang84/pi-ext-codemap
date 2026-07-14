@@ -79,7 +79,7 @@ export function scoreSearchRow(row: SearchRow, plan: QueryPlan, boost: number): 
   const basenameDepth = lowerPath.split("/").length - 1;
   const exactFilenameScore = basename === plan.normalized ? Math.max(1, 4 - basenameDepth) : 0;
   const exactModuleNameScore = exactBasenameStemMatch(basename, plan.coreTerms) ? 8 : 0;
-  const codeLike = /\.(?:[cm]?[jt]sx?|py|go|rs|java|rb|php|cs|cpp|c|h|hpp|swift|kt|scala|sh|sql)$/.test(lowerPath);
+  const codeLike = isCodeLikePath(lowerPath);
   const sourceLike = /(^|\/)src\//.test(lowerPath);
   const testLike = /(^|\/)(?:test|tests|__tests__)\//.test(lowerPath) || /(?:^|[._-])test\./.test(basename);
   const docLike = /(^|\/)(?:readme|architecture|changelog|todo)(?:\.|$)|\.(?:md|mdx|rst|txt)$/.test(lowerPath);
@@ -97,11 +97,22 @@ export function scoreSearchRow(row: SearchRow, plan: QueryPlan, boost: number): 
     && (plan.terms.some((term) => term.toLowerCase() === symbolName) || matchedQueryTokens(lowerPath, plan.endpointPathTerms).length > 0);
   const symbolScore = (symbolish && exactText ? 3 : 0) + (exactSymbol ? 28 : 0) + (exactTermSymbol ? 20 : 0) + (prefixSymbol ? 10 : 0) + (routeHandlerSymbol ? 20 : 0);
   const textCoverageScore = textCoverage * 3;
-  const codeIntentBoost = (plan.codeIntent && codeLike ? 2 : 0) + (plan.codeIntent && sourceLike ? 4 : 0);
+  // Code lift: prefer source over docs on code/UI-navigation queries. The old `codeIntent` gate only
+  // fired on explicit code keywords (function/service/endpoint/…), so natural-language UI queries
+  // ("Overview tab Stock Identity Location cards") got no code lift and lost to doc headings that
+  // carry the same words as clean prose tokens. Fire the lift unless the query is documentation-
+  // oriented (a doc role intent). This is a code lift, never a doc penalty — canonical docs stay
+  // findable and doc-intent queries are unaffected (see the doc-flood ADR).
+  const noisePenalty = fileRolePenalty(roles, plan);
+  const docIntent = plan.roleIntents.some((intent) => DOC_ROLE_INTENTS.has(intent));
+  // Only genuine source earns the lift: never lift a file that carries a noise penalty (generated,
+  // build output, minified, lockfiles), or the small +6 could cancel the penalty and float noise
+  // back into results (regression caught by the generated/dist noise test).
+  const codePreferred = (plan.codeIntent || !docIntent) && noisePenalty === 0;
+  const codeIntentBoost = (codePreferred && codeLike ? 2 : 0) + (codePreferred && sourceLike ? 4 : 0);
   const roleBoost = fileRoleBoost(roles, plan.roleIntents);
   const testPenalty = testLike ? (implementationIntent ? 8 : plan.codeIntent ? 3 : 0) : 0;
   const docPenalty = plan.codeIntent && docLike ? 6 : 0;
-  const noisePenalty = fileRolePenalty(roles, plan);
   const matchedTokens = matchedQueryTokens([lowerPath, lowerText, symbolName].join("\n"), plan.coreTerms);
   const tokenCoverage = plan.coreTerms.length > 0 ? matchedTokens.length / plan.coreTerms.length : 0;
   const finalScore = retrievalBoost + ftsScore + pathScore + filenameScore + exactTextScore + symbolScore + textCoverageScore + codeIntentBoost + roleBoost - testPenalty - docPenalty - noisePenalty;
@@ -152,6 +163,16 @@ export function topHitConfidence(results: SearchResult[], lowMarginThreshold = 0
   const second = results[1].score;
   const margin = top > 0 ? (top - second) / top : 0;
   return { level: margin >= lowMarginThreshold ? "high" : "low", margin };
+}
+
+// Documentation-oriented role intents. When the query carries one of these, code is NOT preferred
+// over docs (the code lift is suppressed) so canonical docs stay the top hit for doc-intent queries.
+const DOC_ROLE_INTENTS = new Set(["overview", "documentation", "decision_record", "agent_instructions"]);
+
+const CODE_PATH_PATTERN = /\.(?:[cm]?[jt]sx?|py|go|rs|java|rb|php|cs|cpp|c|h|hpp|swift|kt|scala|sh|sql)$/;
+
+export function isCodeLikePath(path: string): boolean {
+  return CODE_PATH_PATTERN.test(path.toLowerCase());
 }
 
 export function fileRoleBoost(roles: string[], intents: string[]): number {
@@ -241,8 +262,14 @@ const FTS_MATCH_BASE = 10;
 const FTS_MATCH_BONUS_CAP = 5;
 
 function rankScore(rank: number): number {
-  if (rank < 0) return FTS_MATCH_BASE + Math.min(FTS_MATCH_BONUS_CAP, Math.abs(rank) * 1_000_000);
-  return Math.max(0, FTS_MATCH_BASE - rank);
+  // bm25() returns a negative score for every real FTS match (more-negative = more relevant), so a
+  // real match always has rank < 0. A non-negative rank is exclusively the `0 as rank` sentinel that
+  // non-FTS retrieval sources (path_match/basename_term/endpoint_route/role_intent) use for rows that
+  // never went through FTS. Those rows must earn no FTS credit: giving them the FTS_MATCH_BASE (10)
+  // rewarded a match that never happened and inflated role-intent doc candidates (see the doc-flood
+  // ADR). FTS relevance still enters ranking via the per-source boost and the SQL `order by rank`.
+  if (rank >= 0) return 0;
+  return FTS_MATCH_BASE + Math.min(FTS_MATCH_BONUS_CAP, Math.abs(rank) * 1_000_000);
 }
 
 function matchSnippet(text: string, plan: QueryPlan): string {

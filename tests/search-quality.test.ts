@@ -238,10 +238,16 @@ test("bench search-quality fixture gate uses checked-in fixtures", () => {
   const report = JSON.parse(output) as { gate: { passed: boolean }; reports: Array<{ root: string; natural: { cases: number; excludedHits?: unknown[] }; structural: { cases: number } }> };
 
   assert.equal(report.gate.passed, true);
-  assert.equal(report.reports.length, 1);
-  assert.ok(report.reports[0]?.root.endsWith("tests/fixtures/search-quality/agent-nav"), report.reports[0]?.root);
-  assert.ok(report.reports[0]?.natural.cases >= 9, JSON.stringify(report.reports[0]?.natural));
-  assert.deepEqual(report.reports[0]?.natural.excludedHits, []);
+  assert.equal(report.reports.length, 2);
+  const agentNav = report.reports.find((entry) => entry.root.endsWith("tests/fixtures/search-quality/agent-nav"));
+  const docFlood = report.reports.find((entry) => entry.root.endsWith("tests/fixtures/search-quality/doc-flood"));
+  assert.ok(agentNav, JSON.stringify(report.reports.map((entry) => entry.root)));
+  assert.ok(docFlood, JSON.stringify(report.reports.map((entry) => entry.root)));
+  assert.ok(agentNav.natural.cases >= 9, JSON.stringify(agentNav.natural));
+  assert.deepEqual(agentNav.natural.excludedHits, []);
+  // doc-flood proves conceptual/UI-navigation queries return code, not role-word docs.
+  assert.ok(docFlood.natural.cases >= 8, JSON.stringify(docFlood.natural));
+  assert.deepEqual(docFlood.natural.excludedHits, []);
 });
 
 test("bench search-quality gate includes generic repo-shape regression cases", (t) => {

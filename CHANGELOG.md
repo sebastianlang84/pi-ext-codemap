@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix conceptual/UI-navigation search returning README/overview docs instead of the code that implements the feature. Three ranking changes (see [`docs/adr/20260714-search-code-vs-doc-target.md`](docs/adr/20260714-search-code-vs-doc-target.md)): non-FTS retrieval sources no longer earn a phantom FTS credit; the `overview` role intent fires only on doc-evidence, not on a role word mixed with identifier terms; and an additive code-chunk quota plus a doc-intent-gated code lift surface source over docs on code/UI queries while keeping canonical docs the top hit for doc-intent queries and never lifting generated/build noise. Guarded by a new checked-in `doc-flood` search-quality fixture and ranking unit tests.
 - Point `codemap` CLI users to `codemap index --approve` in the not-approved / not-indexed errors (search, context, index, and the architecture report) instead of the stale MCP `codemap_index` / `approveRepo` wording, and state that indexing is local-only and never modifies the repo.
 - Show the first matched line and score of each hit in `codemap search` human output (one line per hit; JSON output unchanged) so ranked results carry the same at-a-glance signal as a grep line.
 - Silence the one-line `node:sqlite` `ExperimentalWarning` on the `codemap` CLI (via a `--disable-warning=ExperimentalWarning` shebang flag) so shell/agent callers get clean stderr; stdout JSON is unaffected and the `codemap-mcp` server keeps its default shebang.
