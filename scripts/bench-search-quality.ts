@@ -68,6 +68,7 @@ const localRepoRoots = [
 ];
 const fixtureRoots = [
   fileURLToPath(new URL("../tests/fixtures/search-quality/agent-nav", import.meta.url)),
+  fileURLToPath(new URL("../tests/fixtures/search-quality/doc-flood", import.meta.url)),
 ];
 const ignoredStructuralNames = new Set(["main", "run"]);
 const astGrepGroundTruthSpecs: AstGrepGroundTruthSpec[] = [
@@ -309,6 +310,23 @@ function naturalCasesFor(searchRoot: string, indexRoot: string): SearchCase[] {
     }))
     .filter((item) => item.expectedPaths.length > 0);
   const generic = genericRepoShapeCases(root, toCases);
+  if (lower.includes("search-quality/doc-flood")) {
+    // Role-word doc-flood: conceptual / UI-navigation queries must return the code that
+    // implements the feature, not README/overview docs that merely share role words with the
+    // query ("overview", "setup", "config"). Counter-cases keep genuine doc-intent queries on
+    // the README. See docs/adr/20260714-search-code-vs-doc-target.md and the doc-flood fixture.
+    return [...generic, ...toCases([
+      { query: "Overview tab Stock Identity Location cards part detail", expectedPath: "frontend/src/app/parts/[id]/page.tsx" },
+      { query: "where does the part detail stock identity location live", expectedPath: "frontend/src/app/parts/[id]/page.tsx" },
+      { query: "Setup wizard step form component", expectedPath: "frontend/src/components/SetupWizard.tsx" },
+      { query: "Config panel settings editor", expectedPath: "frontend/src/components/ConfigPanel.tsx" },
+      { query: "PartDetailContent", expectedPath: "frontend/src/app/parts/[id]/page.tsx" },
+      { query: "SetupWizard component", expectedPath: "frontend/src/components/SetupWizard.tsx" },
+      // Counter-cases: genuine doc-intent queries must still resolve to the overview README.
+      { query: "what is this project about", expectedPath: "README.md" },
+      { query: "what is the purpose of this project", expectedPath: "README.md" },
+    ])];
+  }
   if (lower.includes("search-quality/agent-nav")) {
     return [...generic, ...toCases([
       { query: "mainImplementationEntrypoint", expectedPath: "src/index.ts", excludedPaths: ["dist/index.js", "dist/bundle.js"] },

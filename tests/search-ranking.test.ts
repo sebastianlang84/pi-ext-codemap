@@ -183,3 +183,57 @@ test("ranking gives exact module-name terms enough weight over sibling content m
   assert.ok(moduleDiagnostics.filenameScore > siblingDiagnostics.filenameScore, JSON.stringify({ moduleDiagnostics, siblingDiagnostics }));
   assert.ok(moduleDiagnostics.finalScore > siblingDiagnostics.finalScore, JSON.stringify({ moduleDiagnostics, siblingDiagnostics }));
 });
+
+test("phantom FTS credit removed: non-FTS candidates earn no ftsScore", () => {
+  // A real FTS match returns a negative bm25 rank; non-FTS retrieval sources (path/basename/
+  // endpoint/role_intent) use `0 as rank` as a sentinel. That sentinel must earn no FTS credit —
+  // previously it got the full FTS_MATCH_BASE (10), inflating role-intent README candidates and
+  // flooding conceptual queries with docs. See the doc-flood ADR.
+  const plan = planQuery("project overview");
+  const row = {
+    path: "README.md",
+    language: "markdown",
+    startLine: 1,
+    endLine: 1,
+    kind: "file" as const,
+    text: "# Project\n\nAn overview of the project.",
+    symbolName: null,
+  };
+  const nonFts = scoreSearchRow({ ...row, rank: 0 }, plan, 18);
+  const ftsMatch = scoreSearchRow({ ...row, rank: -1 }, plan, 18);
+  assert.equal(nonFts.ftsScore, 0);
+  // A real bm25 match earns the base (10) plus the saturated magnitude bonus (5).
+  assert.equal(ftsMatch.ftsScore, 15);
+});
+
+test("overview role intent fires only on doc-evidence, not on a role-word mixed with identifiers", () => {
+  // "overview" is also a UI section/tab name; mixed with concrete identifier terms it is a
+  // code/UI-navigation query, not a request for overview docs (doc-flood ADR).
+  assert.ok(!planQuery("Overview tab Stock Identity Location cards part detail").roleIntents.includes("overview"));
+  assert.ok(!planQuery("overview panel stock identity location").roleIntents.includes("overview"));
+  // Doc-evidence keeps overview docs findable.
+  assert.ok(planQuery("what is this project about").roleIntents.includes("overview"));
+  assert.ok(planQuery("project overview").roleIntents.includes("overview"));
+  assert.ok(planQuery("what is the purpose of this project").roleIntents.includes("overview"));
+});
+
+test("code lift prefers source on code/UI queries, is suppressed on doc-intent and noise", () => {
+  const source = {
+    path: "frontend/src/app/parts/[id]/page.tsx",
+    language: "typescript",
+    startLine: 1,
+    endLine: 5,
+    kind: "function" as const,
+    text: "function PartDetailContent() { return null; }",
+    symbolName: "PartDetailContent",
+  };
+  // UI-navigation query (no doc role intent): source earns the lift (+2 code, +4 src).
+  const uiPlan = planQuery("Overview tab Stock Identity Location cards part detail");
+  assert.equal(scoreSearchRow({ ...source, rank: -1 }, uiPlan, 12).codeIntentBoost, 6);
+  // Doc-intent query: lift suppressed so canonical docs stay the top hit.
+  const docPlan = planQuery("what is this project about");
+  assert.equal(scoreSearchRow({ ...source, rank: -1 }, docPlan, 12).codeIntentBoost, 0);
+  // Noise source (generated): never lifted, or the +6 could cancel the noise penalty.
+  const generated = { ...source, path: "src/__generated__/client.ts", symbolName: "generatedClient" };
+  assert.equal(scoreSearchRow({ ...generated, rank: -1 }, uiPlan, 12).codeIntentBoost, 0);
+});

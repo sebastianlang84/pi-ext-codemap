@@ -1,5 +1,18 @@
-import { TEXT_COVERAGE_WEIGHT, fileRoleBoost, fileRoles, rankAndSlice, toScoredCandidate } from "./ranking.js";
+import { TEXT_COVERAGE_WEIGHT, fileRoleBoost, fileRoles, isCodeLikePath, rankAndSlice, toScoredCandidate } from "./ranking.js";
 import { escapeLike, escapeRegExp } from "./text-util.js";
+// How deep to scan FTS-ranked chunks looking for code files that the per-source `limit` cutoff
+// crowded out, and how many code chunks to guarantee into the pool per FTS query. Purely additive:
+// the quota only appends candidates, so it can surface a crowded-out code target but never removes
+// or reorders a doc hit (ranking still sorts by score). See the doc-flood ADR.
+const CODE_QUOTA_SCAN = 60;
+const CODE_QUOTA_KEEP = 6;
+// A guaranteed foothold is for the code that *implements* the queried feature, not any code file
+// that happens to share a stopword-ish token with the query. Without a floor, a generic test/util
+// whose only overlap is a common term ("test", "config") gets force-added past the visible cutoff,
+// and — because it may carry a role boost — can occupy a top-5 slot and crowd a genuinely on-topic
+// hit out of the downstream read plan (regression caught by the reviewer-context-scout fixture).
+// Require a code-quota rescue to cover a meaningful share of the query's core terms.
+const CODE_QUOTA_MIN_COVERAGE = 0.2;
 export function pathFilterForPrefix(pathPrefix) {
     return pathPrefix ? `${escapeLike(pathPrefix)}%` : "%";
 }
@@ -16,6 +29,7 @@ export function collectSearchCandidateDiagnostics(db, request) {
         const remaining = Math.max(request.limit * 2 - candidates.length, request.limit);
         candidates.push(...symbolFtsCandidates(db, { ...request, ftsQuery, remaining }));
         candidates.push(...chunkFtsCandidates(db, { ...request, ftsQuery, remaining }));
+        candidates.push(...codeQuotaCandidates(db, { ...request, ftsQuery }));
     }
     return applyFileTextCoverage(candidates, request.plan, request.limit);
 }
@@ -139,6 +153,28 @@ function chunkFtsCandidates(db, request) {
     limit ?
   `).all(request.ftsQuery.query, request.pathFilter, request.remaining);
     return rows.map((row) => toSearchCandidate(row, request.plan, request.ftsQuery.tierBoost + 1, "chunk_fts"));
+}
+// Guarantee code files a foothold in the candidate pool. On conceptual/UI-navigation queries the
+// natural-language tokens match many doc chunks whose bm25 rank beats the code that implements the
+// feature, so the per-query `order by rank limit ?` cutoff can drop every code file (verified on
+// partflow: 0 code candidates of 36 for a UI-navigation query). This scans deeper into the ranked
+// chunk matches and appends the top code-file chunks. Additive only — it never removes a doc hit.
+function codeQuotaCandidates(db, request) {
+    const rows = db.prepare(`
+    select f.path, f.language, c.start_line as startLine, c.end_line as endLine, c.kind, c.text,
+           bm25(chunks_fts) as rank, f.size as size, null as symbolName
+    from chunks_fts
+    join chunks c on c.id = chunks_fts.rowid
+    join files f on f.id = c.file_id
+    where chunks_fts match ? and f.path like ? escape '\\'
+    order by rank
+    limit ?
+  `).all(request.ftsQuery.query, request.pathFilter, CODE_QUOTA_SCAN);
+    return rows
+        .filter((row) => isCodeLikePath(row.path))
+        .map((row) => toSearchCandidate(row, request.plan, request.ftsQuery.tierBoost + 1, "code_quota"))
+        .filter((candidate) => candidate.scoreDiagnostics.tokenCoverage >= CODE_QUOTA_MIN_COVERAGE)
+        .slice(0, CODE_QUOTA_KEEP);
 }
 function symbolFtsCandidates(db, request) {
     const rows = db.prepare(`

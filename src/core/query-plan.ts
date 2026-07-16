@@ -83,7 +83,14 @@ const codeIntentTerms = new Set([
 function inferRoleIntents(normalized: string, terms: string[]): string[] {
   const intents: string[] = [];
   const has = (...needles: string[]) => needles.some((needle) => needle.includes(" ") ? normalized.includes(needle) : terms.includes(needle));
-  if (has("what is this project", "project about", "overview", "purpose")) intents.push("overview");
+  // "overview" is a role word AND a common UI section/tab name (an "Overview tab" with cards, etc.),
+  // so a bare "overview" mixed with concrete identifier terms is a code/UI-navigation query, not a
+  // request for overview docs. Fire the overview role intent only on doc-evidence: an explicit
+  // doc-intent phrase/word, or an overview-dominant query (overview with at most one other term).
+  // Without this, "overview" alone pulled every README into the pool and boosted them, flooding
+  // conceptual queries with docs (see the doc-flood ADR).
+  const overviewDominant = terms.includes("overview") && terms.length <= 2;
+  if (has("what is this project", "project about", "purpose", "readme") || overviewDominant) intents.push("overview");
   if (has("agent", "agents", "instructions", "program", "claude")) intents.push("agent_instructions");
   if (has("edit")) intents.push("overview", "agent_instructions", "implementation/main");
   if (has("implemented", "implementation", "source", "defined", "architecture", "model", "used", "orchestrator", "pipeline", "provider", "run")) intents.push("implementation");
