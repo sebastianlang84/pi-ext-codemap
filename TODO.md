@@ -32,6 +32,113 @@ Kein aktiver Implementierungsslice. Weitere Konventions-/Targeting-Arbeit erst b
 - [ ] Review-Cleanup ohne Produktverhalten nur bei einem konkreten Review-Befund durchführen.
   - `codemap_context` und das Gesamtbudget liegen nahe am Token-Gate; neue Parameter, Guidelines oder öffentliche Tools brauchen eine explizite Budgetentscheidung.
 
+## Discoverability: agents under-use codemap even when the rule mandates it
+
+> **Research + design done (2026-07-18) — nothing implemented.** External research (how others make
+> agents adopt a preferred tool over grep, and make it survive delegation) is reconciled with this
+> CLI-first/no-MCP host in [`docs/developer/adoption-enforcement.md`](docs/developer/adoption-enforcement.md);
+> the decision frame is [ADR 20260718](docs/adr/20260718-grep-fallback-enforcement-gate.md) (Status:
+> Proposed).
+>
+> **Conclusion:** prose is not load-bearing — the only deterministic layer on Claude Code is
+> hooks/permissions. A `PreToolUse` **deny-with-reason** hook is the single load-bearing mechanism,
+> and because **hooks fire inside subagents** it closes *both* Incident 1 (grep reflex) and Incident 2
+> (delegation gap) with one mechanism — no need to copy the rule into subagent contexts. This flips
+> the earlier deferral of the grep hook in the `codemap-adoption-friction` memory (fix #6), because
+> Incident 2 added a *correctness* cost, not just latency.
+>
+> **Recommended (not built):** global `PreToolUse` hook matching `Grep|Glob` + `Bash`
+> (post-pipe/`&&`-aware), that only denies when `codemap status --json` reports `readiness=="ready"`
+> for the cwd, with a `permissionDecisionReason` naming the exact `codemap search` command and a
+> `CODEMAP_ALLOW_GREP=1` escape hatch for raw-text scans; fail-open otherwise. Footguns encoded:
+> exit-2-not-1, `additionalContext` not honored on `PreToolUse`, "automated gate" wording vs the
+> Opus-4.6 stop-on-block bug.
+>
+> **Open sub-decision (owner):** strictness — hard-deny-narrow + escape hatch (recommended) vs
+> advisory-only reminder injection. **Blast radius:** global on the shared VM (every session/repo/
+> agent) → approval-gated before any implementation.
+
+**Logged:** 2026-07-18 (from a Claude Code session in `~/partflow`)
+
+### Incident 1
+
+An agent did an extended code-reconnaissance task (building an audit-lens skill: locating
+build-readiness math, availability/reservation code, parsers, guard files across the repo) and
+navigated almost entirely with `grep` + subagent `test -f`, **never** running `codemap search`
+/ `codemap context` — despite:
+- the global `AGENTS.md` explicitly stating codemap is the primary navigation tool
+  ("`codemap search`, then `codemap context`, before find/grep"),
+- the repo being indexed and ready (a `SessionStart` hook even printed "codemap index ready"),
+- codemap being clearly the better fit (symbol-level lookup with `file:line`).
+
+The user had to prompt "codemap was indexed — why do you never use it?" before it got used. When
+finally run, one `codemap search` resolved the exact symbols (`computeBuildReadiness` →
+`build-readiness.ts:71`, `canBuildValue`, `AvailabilityTab`) in a single call — confirming it would
+have been faster from the start. Root cause was habit (grep reflex), not a codemap failure.
+
+### Why this matters
+
+The rule exists but does not *fire* at the moment of action. A `SessionStart` "index ready" line
+and a line in `AGENTS.md` are both passive — they don't intercept the grep reflex when the agent is
+mid-task. Discoverability, not capability, is the gap.
+
+### Candidate directions (for maintainers to weigh — not prescriptive)
+
+- **Point-of-use nudge:** when the harness/hook detects `grep`/`rg`/`find` on an indexed repo,
+  surface a one-line reminder ("indexed — `codemap search <terms>` may be faster") rather than
+  relying on session-start text the agent has scrolled past.
+- **Make the SessionStart line actionable, not decorative:** include a ready-to-run example
+  (`codemap search "<likely task terms>"`) instead of just "index ready".
+- **Tool-description weighting:** if codemap is exposed as an MCP/tool, ensure its description
+  frames it as *first* nav step for symbol/definition/caller lookup, so it out-competes generic
+  search tools at selection time. (Balance against this repo's low-token-injection rule.)
+- **Staleness ergonomics:** the index flagged `stale` after a release + new untracked files; a
+  near-zero-friction auto-refresh (or a louder "run `codemap index`") would remove one more reason
+  to fall back to grep.
+
+Deciding which of these is worth the prompt-token cost is the actual open question.
+
+### Incident 2 — the rule dies at the delegation boundary (2026-07-18)
+
+**Logged:** 2026-07-18 (from a second Claude Code session in `~/partflow`, a P1 inventory-race
+diagnosis). Same phenomenon as Incident 1, but a distinct root cause worth logging separately.
+
+**What happened.** The main agent judged the reconnaissance "non-trivial" and — following its
+global rule "use sub-agents by default" — dispatched an `Explore` subagent to map the code path.
+The subagent navigated entirely with `grep`/`glob`/`read` and **never** ran codemap. The main
+agent itself also never ran codemap before delegating. The user again had to prompt ("did you use
+codemap? if not, why?") before it was used. One `codemap search` then resolved the exact symbols
+(`inventory.service`, `stock-change.ts`, the DTO, the api-client layer) in a single call.
+
+**Root cause — different from Incident 1.** Incident 1 was a single agent's grep *habit*. This one
+is a **delegation-propagation gap**: the codemap-first rule lives only in the *main* agent's context
+(global `AGENTS.md`). When the main agent delegates the navigation to a subagent, the rule does not
+travel with the delegation — it is not injected into the subagent's prompt, and the `Explore` agent
+type is itself framed as a grep/glob "search agent" with no codemap awareness. So the agent offloaded
+*exactly the activity the rule governs* (code navigation) onto a delegate that never received the
+rule. The main agent would have had to manually copy the rule into the subagent prompt, and didn't.
+
+There is a **rule-interaction** angle here: two global rules ("navigate with codemap first" and
+"delegate recon to subagents by default") pull against each other, and the current resolution
+silently drops the first. Any fix has to make the two compose, not compete.
+
+**The cost was correctness, not just latency.** The grep-based recon produced a complete-looking
+report that **missed two DB-level constraints** on `inventory_transactions` (an append-only
+UPDATE/DELETE deny-trigger, and `chk_quantity_delta_nonzero` — a CHECK that rejects a zero delta at
+the DB). `codemap search` surfaced the guard's migration + integration test in its top hits
+immediately. Those constraints materially changed the design (a "set on-hand to N" no-op must be
+caught *before* insert or the DB throws). So codemap under-use here didn't just cost time — the
+grep path shipped a design-relevant omission that codemap's ranking would have caught up front.
+
+**New candidate direction (in addition to Incident 1's list).**
+
+- **Make the rule survive delegation.** The nudge/guidance must reach *subagents*, not only the
+  top-level agent — e.g. the `Explore`/search agent type's own definition frames codemap as its
+  first nav step, or the harness injects the codemap-first line into every code-search subagent's
+  context the same way it reaches the main agent. A rule that only the orchestrator can see will
+  keep dying every time recon is delegated (which the "subagents by default" rule makes the common
+  case, not the exception).
+
 ## Produktentscheidungen / später
 
 - [ ] npm-Registry-Veröffentlichung erst bei konkretem Nutzerbedarf entscheiden; bis dahin bleibt `npm install -g github:sebastianlang84/codemap` kanonisch.
