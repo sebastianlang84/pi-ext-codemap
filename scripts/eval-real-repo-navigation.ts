@@ -2,10 +2,11 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { explainNavigationMisses, summarizeNavigationMissReasons, type NavigationMissExplanation, type NavigationMissReasonSummary } from "../src/core/eval-navigation-diagnostics.ts";
-import { summarizeMissTaxonomy, type MissClass, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
+import { missClasses, summarizeMissTaxonomy, type MissClass, type MissDiagnostic, type MissTaxonomySummary } from "../src/core/eval-miss-taxonomy.ts";
 import { indexRepo, status as indexStatus } from "../src/core/indexer.ts";
 import {
   assessNavigationCase,
@@ -142,230 +143,8 @@ interface ParsedArgs {
 
 const modes: NavigationMode[] = ["lexical", "codemap_search", "codemap_search_context"];
 const taskCohorts: TaskCohort[] = ["baseline", "natural_holdout"];
-const home = homedir();
-const defaultSuites: RealRepoSuite[] = [
-  {
-    label: "macrolens",
-    root: join(home, "dev", "macrolens"),
-    tasks: [
-      {
-        name: "FINRA provider parser change",
-        query: "parseFinraMarginWorksheetXml implementation FINRA worksheet debit balances",
-        entry: "apps/web/src/lib/providers/finra.ts",
-        requiredContext: ["apps/web/src/lib/__tests__/finra-provider.test.ts"],
-        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
-      },
-      {
-        name: "dashboard pipeline FINRA derivations",
-        query: "runDashboardPipeline implementation FINRA derivations provider status",
-        entry: "apps/web/src/lib/dashboard-pipeline.ts",
-        requiredContext: ["apps/web/src/lib/__tests__/dashboard-pipeline.test.ts"],
-        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
-      },
-      {
-        name: "workbench backtest target selection",
-        query: "buildWorkbenchBacktestTargets implementation selectedSlotId RSI score target",
-        entry: "apps/web/src/lib/series-workbench-backtest-target.ts",
-        requiredContext: [
-          "apps/web/src/lib/__tests__/series-workbench-backtest-target.test.ts",
-          "apps/web/src/lib/series-workbench-backtest.ts",
-          "apps/web/src/lib/series-analysis.ts",
-        ],
-        forbidden: ["apps/web/package-lock.json", "package-lock.json", ".agents/memory/daily/2026-03-12-rsi-score-cutover.md"],
-        missHints: { "apps/web/src/lib/series-analysis.ts": "alias" },
-      },
-      {
-        name: "NL holdout newsletter stale macro snapshot",
-        cohort: "natural_holdout",
-        query: "newsletter macro article shows wrong FINRA snapshot after dashboard refresh",
-        entry: "apps/web/src/lib/newsletter-macro-snapshot.ts",
-        requiredContext: ["apps/web/src/lib/__tests__/newsletter-macro-snapshot.test.ts"],
-        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
-      },
-      {
-        name: "NL holdout newsletter macro endpoint warnings",
-        cohort: "natural_holdout",
-        query: "newsletter macro endpoint should return stale unavailable source decision warnings for missing macro indicators",
-        entry: "apps/web/src/app/api/newsletter/macro/route.ts",
-        requiredContext: [
-          "apps/web/src/lib/newsletter-macro-snapshot.ts",
-          "apps/web/src/lib/__tests__/newsletter-macro-snapshot.test.ts",
-          "docs/plans/20260502-newsletter-macro-data-integration.md",
-        ],
-        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
-      },
-      {
-        name: "NL holdout partial provider outage",
-        cohort: "natural_holdout",
-        query: "dashboard provider no data diagnostics should keep FRED and Yahoo series when one market source is empty",
-        entry: "apps/web/src/lib/dashboard-pipeline.ts",
-        requiredContext: ["apps/web/src/lib/__tests__/dashboard-pipeline.test.ts", "apps/web/src/lib/providers/fred.ts", "apps/web/src/lib/providers/yahoo.ts"],
-        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
-      },
-      {
-        name: "NL holdout workbench chart session restore",
-        cohort: "natural_holdout",
-        query: "workbench chart interval and x range settings should survive reload from local storage",
-        entry: "apps/web/src/lib/use-series-workbench-session.ts",
-        requiredContext: ["apps/web/src/lib/__tests__/series-workbench-chart.test.ts", "apps/web/src/components/series-workbench.tsx"],
-        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
-      },
-      {
-        name: "NL holdout macro signal threshold boundaries",
-        cohort: "natural_holdout",
-        query: "market regime cards show neutral tone at threshold values for VIX oil CPI payrolls yield curve and credit",
-        entry: "apps/web/src/lib/macro-signal-rules.ts",
-        requiredContext: ["apps/web/src/lib/macro-derivations.ts", "apps/web/src/lib/__tests__/macro-derivations.test.ts"],
-        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
-      },
-      {
-        name: "NL holdout catalog endpoint duplicate provider ids",
-        cohort: "natural_holdout",
-        query: "catalog endpoint returns duplicate macro provider ids and dashboard dropdown shows repeated series",
-        entry: "apps/web/src/app/api/catalog/route.ts",
-        requiredContext: ["apps/web/src/lib/series-catalog.ts", "apps/web/src/lib/__tests__/series-catalog.test.ts"],
-        forbidden: ["apps/web/package-lock.json", "package-lock.json"],
-      },
-    ],
-  },
-  {
-    label: "alpha-cycles",
-    root: join(home, "alpha-cycles"),
-    tasks: [
-      {
-        name: "controlled run trigger API",
-        query: "trigger_run implementation confirm true run already in progress FastAPI",
-        entry: "api/app.py",
-        requiredContext: ["docker-compose.webapp.yml", "PRD_webapp.md"],
-        forbidden: ["ui/package-lock.json"],
-      },
-      {
-        name: "NL holdout duplicate run rejection",
-        cohort: "natural_holdout",
-        query: "FastAPI confirm true run already in progress",
-        entry: "api/app.py",
-        requiredContext: ["docker-compose.webapp.yml", "PRD_webapp.md"],
-        forbidden: ["ui/package-lock.json"],
-      },
-      {
-        name: "NL holdout run button busy status",
-        cohort: "natural_holdout",
-        query: "webapp run button disabled while batch is starting then status polling shows latest success or failure",
-        entry: "ui/src/App.tsx",
-        requiredContext: ["api/app.py", "PRD_webapp.md"],
-        forbidden: ["ui/package-lock.json"],
-      },
-    ],
-  },
-  {
-    label: "pi-ext-memory",
-    root: join(home, ".pi/agent/git/github.com/sebastianlang84/pi-ext-memory"),
-    tasks: [
-      {
-        name: "memory_search empty-result hints",
-        query: "registerMemoryTools implementation memory_search empty_result_hints near canonical keys near tag suggestions",
-        entry: "src/pi-extension/tools.ts",
-        requiredContext: ["test/pi-extension/tools.test.ts", "src/pi-extension/tag-catalog.ts", "src/pi-extension/formatters.ts"],
-        forbidden: ["package-lock.json"],
-      },
-      {
-        name: "turn-intake memory context hint",
-        query: "buildTurnIntake implementation Use memory_search if prior context matters no relevant stored context",
-        entry: "src/pi-extension/retrieval.ts",
-        requiredContext: ["test/pi-extension/retrieval.test.ts", "src/pi-extension/turn-intake.ts"],
-        forbidden: ["package-lock.json"],
-      },
-      {
-        name: "NL holdout stored memory hint",
-        cohort: "natural_holdout",
-        query: "Use memory_search if prior context matters no relevant stored context",
-        entry: "src/pi-extension/retrieval.ts",
-        requiredContext: ["test/pi-extension/retrieval.test.ts"],
-        forbidden: ["package-lock.json"],
-      },
-      {
-        name: "NL holdout handoff scope precedence",
-        cohort: "natural_holdout",
-        query: "active handoff preload should prefer current session before repo fallback and warn not to overwrite fallback handoffs",
-        entry: "src/pi-extension/retrieval.ts",
-        requiredContext: ["test/pi-extension/retrieval.test.ts", "docs/adr/005-simplified-agent-facing-scopes.md", "docs/adr/006-normal-and-advanced-tool-surface.md"],
-        forbidden: ["package-lock.json", "docs/archive/plans/tool-surface-simplification.md"],
-      },
-      {
-        name: "NL holdout legacy project audit preview",
-        cohort: "natural_holdout",
-        query: "memory audit should show read only legacy project migration preview without rewriting archived or repo scoped records",
-        entry: "src/pi-extension/audit.ts",
-        requiredContext: ["test/pi-extension/audit.test.ts", "docs/adr/005-simplified-agent-facing-scopes.md", "docs/adr/007-memory-model-minimisation.md"],
-        forbidden: ["package-lock.json", "docs/archive/plans/memory-scope-simplification.md"],
-      },
-    ],
-  },
-  {
-    label: "pi-ext-subagents",
-    root: join(home, ".pi/agent/git/github.com/sebastianlang84/pi-ext-subagents"),
-    tasks: [
-      {
-        name: "subagent request validation",
-        query: "normalizeSubagentRequest implementation too many parallel tasks exactly one mode",
-        entry: "src/request.ts",
-        requiredContext: ["tests/request.test.mjs", "src/execution.ts"],
-      },
-      {
-        name: "NL holdout invalid subagent request shape",
-        cohort: "natural_holdout",
-        query: "reject subagent request when parallel tasks and single task are both set",
-        entry: "src/request.ts",
-        requiredContext: ["tests/request.test.mjs"],
-      },
-      {
-        name: "NL holdout reviewer scout recursion guard",
-        cohort: "natural_holdout",
-        query: "reviewer context scout should gather bounded contract and nearby test evidence without scout recursion",
-        entry: "docs/plans/reviewer-scout.md",
-        requiredContext: ["docs/benchmarks/reviewer-scout-fixtures.json", "tests/reviewer-scout-benchmark.test.mjs"],
-        forbidden: ["docs/plans/fanout-reduce.md"],
-      },
-      {
-        name: "NL holdout repo agent mutation warning",
-        cohort: "natural_holdout",
-        query: "repo local subagent approval warning should list mutation capable bash and edit tools without trusting untrusted frontmatter text",
-        entry: "src/agents.ts",
-        requiredContext: ["tests/agents.test.mjs", "src/request.ts"],
-        forbidden: ["package-lock.json", "docs/plans/fanout-reduce.md"],
-      },
-    ],
-  },
-  {
-    label: "pi-ext-astgrep",
-    root: join(home, ".pi/agent/git/github.com/sebastianlang84/pi-ext-astgrep"),
-    tasks: [
-      {
-        name: "ast-grep pattern hint rendering",
-        query: "getPatternHint implementation ast-grep rule language support fixer",
-        entry: "src/ast-grep/pattern-hints.ts",
-        requiredContext: ["test/pattern-hints.test.ts"],
-        forbidden: ["package-lock.json", "docs/archive/plans/slim-fork-plan.md"],
-      },
-      {
-        name: "NL holdout ambiguous sg binary",
-        cohort: "natural_holdout",
-        query: "ast grep binary path should reject ambiguous sg shadow utils command and show install guidance",
-        entry: "src/ast-grep/binary-path.ts",
-        requiredContext: ["src/ast-grep/cli.ts", "test/binary-path.test.ts", "README.md"],
-        forbidden: ["package-lock.json", "docs/archive/plans/slim-fork-plan.md"],
-      },
-      {
-        name: "NL holdout truncated ast-grep output banner",
-        cohort: "natural_holdout",
-        query: "ast grep search should salvage truncated JSON output and explain output exceeded the one megabyte limit",
-        entry: "src/ast-grep/json-output.ts",
-        requiredContext: ["src/ast-grep/result-formatter.ts", "test/sg-compact-json-output.test.ts", "test/result-formatter.test.ts"],
-        forbidden: ["package-lock.json", "docs/archive/plans/slim-fork-plan.md"],
-      },
-    ],
-  },
-];
+// Real-repo suites live in a checked-in data module (home-relative roots), not inline machine paths.
+const defaultSuites: RealRepoSuite[] = loadSuites();
 
 const parsed = parseArgs(process.argv.slice(2));
 const suites = configuredSuites(process.env.CODEMAP_EVAL_REPOS);
@@ -746,4 +525,52 @@ function metric(metrics: ModeMetrics[], mode: NavigationMode): ModeMetrics {
 
 function delta(left: ModeMetrics, right: ModeMetrics): DeltaMetrics {
   return deltaMetrics(left, right);
+}
+
+// Load and validate the checked-in suites data module. Roots are home-relative unless absolute; miss
+// classes are validated at load time (they were TS-checked when inline). Any structural problem throws
+// with the offending location so a bad edit fails loudly rather than silently skewing the eval. The
+// path is computed in the default param (not a module-level const) so it is available when loadSuites
+// runs during module initialization, before EOF declarations are evaluated.
+function loadSuites(suitesPath = join(dirname(fileURLToPath(import.meta.url)), "eval-real-repo-navigation.suites.json")): RealRepoSuite[] {
+  let raw: string;
+  try {
+    raw = readFileSync(suitesPath, "utf8");
+  } catch (error) {
+    throw new Error(`Cannot read eval suites ${suitesPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const parsed = JSON.parse(raw) as { suites?: unknown };
+  if (!Array.isArray(parsed.suites) || parsed.suites.length === 0) throw new Error(`${suitesPath}: expected a non-empty "suites" array`);
+  const home = homedir();
+  const known = new Set<string>(missClasses);
+  return parsed.suites.map((entry, index) => validateSuite(entry, index, home, known, suitesPath));
+}
+
+function validateSuite(entry: unknown, index: number, home: string, knownMissClasses: Set<string>, suitesPath: string): RealRepoSuite {
+  const where = `${suitesPath} suites[${index}]`;
+  if (typeof entry !== "object" || entry === null) throw new Error(`${where}: not an object`);
+  const suite = entry as Record<string, unknown>;
+  if (typeof suite.label !== "string" || suite.label.trim() === "") throw new Error(`${where}: missing label`);
+  if (typeof suite.root !== "string" || suite.root.trim() === "") throw new Error(`${where} (${String(suite.label)}): missing root`);
+  if (!Array.isArray(suite.tasks) || suite.tasks.length === 0) throw new Error(`${where} (${suite.label}): missing tasks`);
+  const root = isAbsolute(suite.root) ? suite.root : join(home, suite.root);
+  const tasks = suite.tasks.map((task, taskIndex) => validateTask(task, `${where} (${suite.label}) tasks[${taskIndex}]`, knownMissClasses));
+  return { label: suite.label, root, tasks };
+}
+
+function validateTask(entry: unknown, where: string, knownMissClasses: Set<string>): RealRepoTask {
+  if (typeof entry !== "object" || entry === null) throw new Error(`${where}: not an object`);
+  const task = entry as Record<string, unknown>;
+  for (const field of ["name", "query", "entry"] as const) {
+    if (typeof task[field] !== "string" || (task[field] as string).trim() === "") throw new Error(`${where}: missing ${field}`);
+  }
+  if (!Array.isArray(task.requiredContext)) throw new Error(`${where}: requiredContext must be an array`);
+  if (task.missHints !== undefined) {
+    for (const value of Object.values(task.missHints as Record<string, unknown>)) {
+      for (const cls of Array.isArray(value) ? value : [value]) {
+        if (typeof cls !== "string" || !knownMissClasses.has(cls)) throw new Error(`${where}: unknown miss class "${String(cls)}"`);
+      }
+    }
+  }
+  return task as unknown as RealRepoTask;
 }

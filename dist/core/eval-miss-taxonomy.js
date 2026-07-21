@@ -1,4 +1,4 @@
-const missClasses = ["alias", "convention", "missing_symbol", "noise", "staleness", "query_formulation", "unknown"];
+export const missClasses = ["alias", "convention", "missing_symbol", "noise", "staleness", "query_formulation", "unknown"];
 export function classifyMisses(input) {
     const diagnostics = [];
     for (const file of input.forbiddenRead) {

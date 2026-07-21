@@ -24,7 +24,7 @@ export interface ClassifyMissesInput {
   hints?: Record<string, MissClass | MissClass[]>;
 }
 
-const missClasses: MissClass[] = ["alias", "convention", "missing_symbol", "noise", "staleness", "query_formulation", "unknown"];
+export const missClasses: MissClass[] = ["alias", "convention", "missing_symbol", "noise", "staleness", "query_formulation", "unknown"];
 
 export function classifyMisses(input: ClassifyMissesInput): MissDiagnostic[] {
   const diagnostics: MissDiagnostic[] = [];
