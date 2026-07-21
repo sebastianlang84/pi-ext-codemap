@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { isNotApprovedError } from "../core/errors.js";
 import { packageVersion } from "../core/package-version.js";
 import { repoKey, resolveStateDir } from "../core/repo.js";
+import { rotateUsageLogIfOverCap, USAGE_LOG_NAME } from "../core/state-gc.js";
 // Local, append-only usage telemetry (ADR 0001 / docs/developer/telemetry-phase1-schema.md).
 //
 // Hard rules, enforced structurally below:
@@ -12,7 +13,6 @@ import { repoKey, resolveStateDir } from "../core/repo.js";
 //   is wrapped so it can never fail a command or alter stdout ("measure, never mutate").
 // - Local-only: one append beside registry.sqlite, mode 0600. Write-only; never read back into ranking.
 const SCHEMA_VERSION = 1;
-const USAGE_LOG_NAME = "usage.jsonl";
 /**
  * Run `run()` and, at operation end, append exactly one JSONL usage event. The operation's return value
  * and any thrown error pass through unchanged. Every derivation runs inside the guarded `finally`, so a
@@ -95,6 +95,9 @@ function appendEvent(stateDir, event) {
     const dir = resolveStateDir(stateDir);
     mkdirSync(dir, { recursive: true });
     const path = join(dir, USAGE_LOG_NAME);
+    // Self-cap: rotate before appending so an installed user (no `gc:state`) can't grow the log without
+    // bound. Checked once per process; over-cap by at most one event. Never throws (see the helper).
+    rotateUsageLogIfOverCap(path);
     appendFileSync(path, JSON.stringify(event) + "\n", { flag: "a", mode: 0o600 });
 }
 function safe(fn) {

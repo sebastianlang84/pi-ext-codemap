@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -10,7 +10,7 @@ import { useIsolatedHome } from "./helpers/repo-fixture.ts";
 useIsolatedHome();
 
 const { codeMapIndex, codeMapSearch } = await import("../src/application/operations.ts");
-const { pruneState, USAGE_LOG_MAX_BYTES } = await import("../src/core/state-gc.ts");
+const { pruneState, rotateUsageLogIfOverCap, USAGE_LOG_MAX_BYTES } = await import("../src/core/state-gc.ts");
 
 interface UsageEvent {
   v: number;
@@ -110,6 +110,33 @@ test("a telemetry write failure never changes the command result", (t) => {
 
   const pkg = codeMapSearch(root, { query: "renderWidget", stateDir });
   assert.equal(pkg.results[0]?.path, "src/widget.ts", "search result is unaffected by a broken log");
+});
+
+test("rotateUsageLogIfOverCap rotates only past the cap and never throws", (t) => {
+  const stateDir = mkdtempSync(join(tmpdir(), "pi-codemap-telemetry-cap-"));
+  t.after(() => rmSync(stateDir, { recursive: true, force: true }));
+  const logPath = join(stateDir, "usage.jsonl");
+
+  assert.equal(rotateUsageLogIfOverCap(logPath, 50), false, "missing log → no rotation, no throw");
+  writeFileSync(logPath, "x".repeat(40));
+  assert.equal(rotateUsageLogIfOverCap(logPath, 50), false, "under cap → no rotation");
+  writeFileSync(logPath, "x".repeat(120));
+  assert.equal(rotateUsageLogIfOverCap(logPath, 50), true, "over cap → rotate");
+  assert.equal(statSync(`${logPath}.1`).size, 120);
+  assert.throws(() => statSync(logPath), "current log was rotated away");
+});
+
+test("appendEvent self-rotates the log once it exceeds the production cap", (t) => {
+  const { root, stateDir } = tempRepo(t);
+  codeMapIndex(root, { approveRepo: true, stateDir });
+  const logPath = join(stateDir, "usage.jsonl");
+  // Sparse file instantly over the 32 MB cap without writing 32 MB.
+  truncateSync(logPath, USAGE_LOG_MAX_BYTES + 1);
+
+  codeMapSearch(root, { query: "renderWidget", stateDir });
+
+  assert.equal(statSync(`${logPath}.1`).size, USAGE_LOG_MAX_BYTES + 1, "oversized log rotated to .1");
+  assert.ok(statSync(logPath).size < USAGE_LOG_MAX_BYTES, "fresh log holds only the new event");
 });
 
 test("rotation past the cap moves the log to .1 and reports reclaimed bytes", (t) => {

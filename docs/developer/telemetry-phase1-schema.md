@@ -143,9 +143,12 @@ to thread it — harvest it later only if the heuristic join proves too ambiguou
 Wire a size-capped rotation into [src/core/state-gc.ts](../../src/core/state-gc.ts), which
 already owns state hygiene and runs via `npm run gc:state`:
 
-- Cap `usage.jsonl` at a fixed size (e.g. 32 MB); on overflow rotate to `usage.jsonl.1`
+- Cap `usage.jsonl` at a fixed size (32 MB); on overflow rotate to `usage.jsonl.1`
   (single generation, old `.1` dropped). No time-based cron, no compression.
-- Report reclaimed bytes alongside the existing DB-prune candidates.
+- Report reclaimed bytes alongside the existing DB-prune candidates (via `npm run gc:state`).
+- The append path also self-caps: `appendEvent` calls `rotateUsageLogIfOverCap` before each write, so
+  installed users (who have no dev clone to run `gc:state`) can never grow the log without bound. The
+  check is one `statSync` per process; `gc:state` remains the reporting/DB-prune entry point.
 
 At ~1–2 KB/event, a heavy multi-agent day is thousands of events → tens of MB/month worst
 case, so one 32 MB cap + one rotated generation is ample headroom.

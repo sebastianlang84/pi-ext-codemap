@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { isNotApprovedError } from "../core/errors.ts";
 import { packageVersion } from "../core/package-version.ts";
 import { repoKey, resolveStateDir } from "../core/repo.ts";
+import { rotateUsageLogIfOverCap, USAGE_LOG_NAME } from "../core/state-gc.ts";
 
 // Local, append-only usage telemetry (ADR 0001 / docs/developer/telemetry-phase1-schema.md).
 //
@@ -15,7 +16,6 @@ import { repoKey, resolveStateDir } from "../core/repo.ts";
 // - Local-only: one append beside registry.sqlite, mode 0600. Write-only; never read back into ranking.
 
 const SCHEMA_VERSION = 1;
-const USAGE_LOG_NAME = "usage.jsonl";
 
 export type TelemetryCommand = "search" | "context" | "index" | "status";
 export type TelemetryOutcome = "ok" | "empty" | "not_approved" | "error";
@@ -121,6 +121,9 @@ function appendEvent(stateDir: string | undefined, event: Record<string, unknown
   const dir = resolveStateDir(stateDir);
   mkdirSync(dir, { recursive: true });
   const path = join(dir, USAGE_LOG_NAME);
+  // Self-cap: rotate before appending so an installed user (no `gc:state`) can't grow the log without
+  // bound. Checked once per process; over-cap by at most one event. Never throws (see the helper).
+  rotateUsageLogIfOverCap(path);
   appendFileSync(path, JSON.stringify(event) + "\n", { flag: "a", mode: 0o600 });
 }
 

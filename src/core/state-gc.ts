@@ -8,8 +8,23 @@ const DB_SIDECAR_SUFFIXES = ["", "-wal", "-shm", "-journal"] as const;
 
 // Usage telemetry log (docs/developer/telemetry-phase1-schema.md). Size-capped with a single rotated
 // generation: on overflow `usage.jsonl` becomes `usage.jsonl.1`, dropping any previous `.1`.
-const USAGE_LOG_NAME = "usage.jsonl";
+export const USAGE_LOG_NAME = "usage.jsonl";
 export const USAGE_LOG_MAX_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Rotate `usage.jsonl` -> `usage.jsonl.1` (dropping any prior `.1`) when it exceeds the cap. Called
+ * inline from the telemetry append so installed users self-cap the log without needing `gc:state` in a
+ * dev clone. Never throws: a missing log (ENOENT) or a rename race just returns false.
+ */
+export function rotateUsageLogIfOverCap(path: string, maxBytes = USAGE_LOG_MAX_BYTES): boolean {
+  try {
+    if (statSync(path).size <= maxBytes) return false;
+    renameSync(path, `${path}.1`);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export type StateGcReason = "orphan_db" | "missing_root";
 
@@ -93,12 +108,7 @@ function collectUsageLogRotation(stateDir: string, maxBytes: number): UsageLogRo
 
 function rotateUsageLog(rotation: UsageLogRotation): UsageLogRotation {
   if (!rotation.overCap) return rotation;
-  try {
-    renameSync(rotation.path, `${rotation.path}.1`);
-  } catch {
-    return rotation;
-  }
-  return { ...rotation, rotated: true };
+  return rotateUsageLogIfOverCap(rotation.path, rotation.maxBytes) ? { ...rotation, rotated: true } : rotation;
 }
 
 /**
