@@ -4,7 +4,9 @@ import { isGraphStale, rebuildFileReferenceGraph } from "./graph-store.ts";
 import { extractSymbols } from "./symbols.ts";
 import type { ScannedFile } from "./scanner.ts";
 
-const INDEX_VERSION = "7";
+// Bump on any change that alters stored chunks/symbols so existing indexes are rebuilt on next run.
+// 8: line-based symbol extraction for Go/Rust/Java/Kotlin/Ruby/PHP.
+export const INDEX_VERSION = "8";
 
 type Db = ReturnType<typeof openRepoDb>;
 type Stmt = ReturnType<Db["prepare"]>;

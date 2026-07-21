@@ -1,7 +1,9 @@
 import { chunkText } from "./chunker.js";
 import { isGraphStale, rebuildFileReferenceGraph } from "./graph-store.js";
 import { extractSymbols } from "./symbols.js";
-const INDEX_VERSION = "7";
+// Bump on any change that alters stored chunks/symbols so existing indexes are rebuilt on next run.
+// 8: line-based symbol extraction for Go/Rust/Java/Kotlin/Ruby/PHP.
+export const INDEX_VERSION = "8";
 function prepareWriteStatements(db) {
     return {
         selectFile: db.prepare("select id, hash, mtime_ms from files where path = ?"),

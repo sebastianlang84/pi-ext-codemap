@@ -35,6 +35,7 @@ test("scanRepoStream yields the same files and state as the eager scanRepo", (t)
 });
 const { collectStateGcCandidates, pruneState } = await import("../src/core/state-gc.ts");
 const { GRAPH_VERSION } = await import("../src/core/graph-store.ts");
+const { INDEX_VERSION } = await import("../src/core/index-store.ts");
 
 function withStateEnv(
   values: Partial<Record<"HOME" | "USERPROFILE" | "CODEMAP_HOME" | "XDG_DATA_HOME", string | undefined>>,
@@ -191,7 +192,7 @@ export function migratedNeedle() {
     assert.ok(!nodeColumns.has("symbol_id"));
     assert.ok(!edgeColumns.has("scope"));
     assert.ok(!edgeColumns.has("confidence"));
-    assert.equal((migratedDb.prepare("select value from meta where key = 'index_version'").get() as { value: string }).value, "7");
+    assert.equal((migratedDb.prepare("select value from meta where key = 'index_version'").get() as { value: string }).value, INDEX_VERSION);
     assert.equal((migratedDb.prepare("select value from meta where key = 'graph_version'").get() as { value: string }).value, GRAPH_VERSION);
     assert.equal((migratedDb.prepare("select count(*) as count from files where path = 'src/legacy.ts'").get() as { count: number }).count, 1);
   } finally {
