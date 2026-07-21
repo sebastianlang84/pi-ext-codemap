@@ -74,3 +74,22 @@ test("cli reports usage errors on stderr with a non-zero code", () => {
   assert.equal(unknownOption.code, 2);
   assert.match(unknownOption.err, /Unknown option/);
 });
+
+test("cli --limit rejects non-positive-integers before they reach SQL", (t) => {
+  // Each of these previously reached the SQL bind as NaN/float and died with an opaque datatype error.
+  for (const value of ["abc", "0", "-5", "3.5"]) {
+    const result = runCli(["search", "x", "--limit", value]);
+    assert.equal(result.code, 2, `--limit ${value} should be a usage error`);
+    assert.match(result.err, /positive integer/);
+  }
+  const missingValue = runCli(["search", "x", "--limit"]);
+  assert.equal(missingValue.code, 2);
+  assert.match(missingValue.err, /positive integer/);
+
+  // A valid limit still round-trips.
+  const { root, stateDir } = cliRepo(t);
+  const io = { cwd: root };
+  runCli(["index", "--approve", "--state-dir", stateDir], io);
+  const ok = runCli(["search", "renderWidget", "--limit", "1", "--state-dir", stateDir], io);
+  assert.equal(ok.code, 0);
+});

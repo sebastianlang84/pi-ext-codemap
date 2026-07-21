@@ -46,6 +46,16 @@ Notes:
   ~/.local/share/codemap. Existing ~/.pi/agent/state/codemap data remains in use until migrated.
   Override with --state-dir; prune deleted-repo indexes with 'npm run gc:state' in a clone.`;
 
+// Validate numeric flags at the CLI boundary. The MCP path is guarded by its TypeBox schema; the CLI
+// was not, so a non-integer `--limit` flowed as NaN through the clamp into the SQL bind and died with an
+// opaque "datatype mismatch". A thrown usage error here is caught in runCli and returned as exit 2.
+function parsePositiveIntFlag(name: string, value: string | undefined): number {
+  if (value === undefined || value.trim() === "") throw new Error(`${name} requires a positive integer, e.g. ${name} 10`);
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${name} requires a positive integer, got: ${value}`);
+  return parsed;
+}
+
 function parseArgs(argv: string[]): ParsedArgs {
   const parsed: ParsedArgs = { json: false, full: false, approve: false, positionals: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -58,7 +68,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--json": parsed.json = true; break;
       case "--full": parsed.full = true; break;
       case "--approve": case "--approve-repo": parsed.approve = true; break;
-      case "--limit": parsed.limit = Number(takeValue()); break;
+      case "--limit": parsed.limit = parsePositiveIntFlag("--limit", takeValue()); break;
       case "--path-prefix": parsed.pathPrefix = takeValue(); break;
       case "--repo": case "--repo-path": parsed.repo = takeValue(); break;
       case "--state-dir": parsed.stateDir = takeValue(); break;
