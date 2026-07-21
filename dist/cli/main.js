@@ -1,5 +1,7 @@
 import { codeMapContext, codeMapIndex, codeMapSearch, codeMapStatus } from "../application/operations.js";
 import { packageVersion } from "../core/package-version.js";
+// Every operation issued from this surface is tagged so telemetry can distinguish CLI from MCP/Pi.
+const ADAPTER = "cli";
 const USAGE = `codemap — local SQLite/FTS repo map for coding agents
 
 Usage:
@@ -79,7 +81,7 @@ function runStatus(parsed, cwd) {
         repoPath: parsed.repo,
         pathPrefix: parsed.pathPrefix,
         stateDir: parsed.stateDir,
-    });
+    }, ADAPTER);
     if (parsed.json)
         return ok(JSON.stringify(result, null, 2));
     const lines = [
@@ -98,7 +100,7 @@ function runIndex(parsed, cwd) {
         repoPath: parsed.repo,
         pathPrefix: parsed.pathPrefix,
         stateDir: parsed.stateDir,
-    });
+    }, ADAPTER);
     if (parsed.json)
         return ok(JSON.stringify(result, null, 2));
     const warnings = result.warnings.length > 0 ? `\n${result.warnings.map((w) => `(!) ${w}`).join("\n")}` : "";
@@ -114,7 +116,7 @@ function runSearch(parsed, cwd) {
         limit: parsed.limit,
         pathPrefix: parsed.pathPrefix,
         stateDir: parsed.stateDir,
-    });
+    }, ADAPTER);
     if (parsed.json)
         return ok(JSON.stringify(pkg, null, 2));
     const rows = pkg.results.map((r) => {
@@ -138,7 +140,7 @@ function runContext(parsed, cwd) {
         limit: parsed.limit,
         pathPrefix: parsed.pathPrefix,
         stateDir: parsed.stateDir,
-    });
+    }, ADAPTER);
     if (parsed.json)
         return ok(JSON.stringify(pkg, null, 2));
     const rows = pkg.readFirst.map((item) => {

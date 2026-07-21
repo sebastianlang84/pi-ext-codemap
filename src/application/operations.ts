@@ -6,7 +6,7 @@ import type { CodeMapContextPackage } from "../core/context-builder.ts";
 import { indexRepo, status } from "../core/indexer.ts";
 import { findRepoRoot, type StateOptions } from "../core/repo.ts";
 import { searchCodeMapWithDiagnostics, type CodeMapSearchPackage } from "../core/search.ts";
-import { runWithTelemetry } from "./telemetry.ts";
+import { runWithTelemetry, type TelemetryAdapter } from "./telemetry.ts";
 
 // Host-neutral execution surface shared by the CLI, MCP, and Pi adapters.
 // Product behavior belongs behind this boundary; adapters only translate inputs and outputs.
@@ -36,11 +36,12 @@ function effectiveSearchLimit(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? 10, 1), 50);
 }
 
-export function codeMapStatus(cwd: string, params: RepoPathParams & { full?: boolean; pathPrefix?: string }) {
+export function codeMapStatus(cwd: string, params: RepoPathParams & { full?: boolean; pathPrefix?: string }, adapter?: TelemetryAdapter) {
   return runWithTelemetry({
     command: "status",
     cwd,
     params,
+    adapter,
     resolveRoot: () => repoRootHint(cwd, params),
     run: () =>
       status(operationCwd(cwd, params), {
@@ -51,11 +52,12 @@ export function codeMapStatus(cwd: string, params: RepoPathParams & { full?: boo
   });
 }
 
-export function codeMapIndex(cwd: string, params: RepoPathParams & { approveRepo?: boolean; pathPrefix?: string }) {
+export function codeMapIndex(cwd: string, params: RepoPathParams & { approveRepo?: boolean; pathPrefix?: string }, adapter?: TelemetryAdapter) {
   return runWithTelemetry({
     command: "index",
     cwd,
     params,
+    adapter,
     resolveRoot: () => repoRootHint(cwd, params),
     run: () =>
       indexRepo({
@@ -76,11 +78,12 @@ export function codeMapIndex(cwd: string, params: RepoPathParams & { approveRepo
   });
 }
 
-export function codeMapSearch(cwd: string, params: RepoPathParams & { query: string; limit?: number; pathPrefix?: string }) {
+export function codeMapSearch(cwd: string, params: RepoPathParams & { query: string; limit?: number; pathPrefix?: string }, adapter?: TelemetryAdapter) {
   return runWithTelemetry({
     command: "search",
     cwd,
     params,
+    adapter,
     resolveRoot: () => repoRootHint(cwd, params),
     run: () =>
       searchCodeMapWithDiagnostics({
@@ -104,11 +107,12 @@ export function codeMapSearch(cwd: string, params: RepoPathParams & { query: str
   });
 }
 
-export function codeMapContext(cwd: string, params: RepoPathParams & { target: string; limit?: number; pathPrefix?: string }) {
+export function codeMapContext(cwd: string, params: RepoPathParams & { target: string; limit?: number; pathPrefix?: string }, adapter?: TelemetryAdapter) {
   return runWithTelemetry({
     command: "context",
     cwd,
     params,
+    adapter,
     resolveRoot: () => repoRootHint(cwd, params),
     run: () =>
       codemapContext({

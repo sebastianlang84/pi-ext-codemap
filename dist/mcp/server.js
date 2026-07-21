@@ -14,10 +14,10 @@ const PROTOCOL_VERSION = "2025-11-25";
 const SUPPORTED_PROTOCOL_VERSIONS = new Set(["2025-11-25", "2025-06-18"]);
 const INSTRUCTIONS = "Use these tools to navigate code in this repo. codemap_search ranks files/symbols/chunks — start there when the target file/symbol is unknown or the query is conceptual; for exhaustive matches of a known literal or regex, grep/rg is the right tool. If a search result is missing, re-query or raise limit before anything else. codemap_context lists read-first neighbors (tests/docs/imports) of a known target — use it as a follow-up on a file you already trust, passing an exact path or symbol, not a broad query; do not point it at an uncertain top search hit, as it expands whatever it lands on. codemap_status checks index readiness. Run codemap_index to build/refresh; the first index needs approveRepo=true and only after the user approves local indexing. Staleness is advisory. If your host lists these tools without preloading their schemas (deferred tools), load all four before the first call.";
 const executors = {
-    codemap_status: codeMapStatus,
-    codemap_index: codeMapIndex,
-    codemap_search: codeMapSearch,
-    codemap_context: codeMapContext,
+    codemap_status: (cwd, params) => codeMapStatus(cwd, params, "mcp"),
+    codemap_index: (cwd, params) => codeMapIndex(cwd, params, "mcp"),
+    codemap_search: (cwd, params) => codeMapSearch(cwd, params, "mcp"),
+    codemap_context: (cwd, params) => codeMapContext(cwd, params, "mcp"),
 };
 const parametersByTool = new Map(codeMapOperationMetadata.map((operation) => [operation.toolName, operation.parameters]));
 // Read-only tools can be auto-run by hosts without a confirmation prompt; index writes the local

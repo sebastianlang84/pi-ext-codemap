@@ -1,6 +1,9 @@
 import { codeMapContext, codeMapIndex, codeMapSearch, codeMapStatus } from "../application/operations.ts";
 import { packageVersion } from "../core/package-version.ts";
 
+// Every operation issued from this surface is tagged so telemetry can distinguish CLI from MCP/Pi.
+const ADAPTER = "cli" as const;
+
 export interface CliResult {
   code: number;
   out: string;
@@ -85,7 +88,7 @@ function runStatus(parsed: ParsedArgs, cwd: string): CliResult {
     repoPath: parsed.repo,
     pathPrefix: parsed.pathPrefix,
     stateDir: parsed.stateDir,
-  });
+  }, ADAPTER);
   if (parsed.json) return ok(JSON.stringify(result, null, 2));
   const lines = [
     `readiness: ${result.readiness}`,
@@ -103,7 +106,7 @@ function runIndex(parsed: ParsedArgs, cwd: string): CliResult {
     repoPath: parsed.repo,
     pathPrefix: parsed.pathPrefix,
     stateDir: parsed.stateDir,
-  });
+  }, ADAPTER);
   if (parsed.json) return ok(JSON.stringify(result, null, 2));
   const warnings = result.warnings.length > 0 ? `\n${result.warnings.map((w) => `(!) ${w}`).join("\n")}` : "";
   return ok(`Indexed ${result.indexed}/${result.scanned} files (${result.skipped} skipped, ${result.removed} removed)${warnings}`);
@@ -118,7 +121,7 @@ function runSearch(parsed: ParsedArgs, cwd: string): CliResult {
     limit: parsed.limit,
     pathPrefix: parsed.pathPrefix,
     stateDir: parsed.stateDir,
-  });
+  }, ADAPTER);
   if (parsed.json) return ok(JSON.stringify(pkg, null, 2));
   const rows = pkg.results.map((r) => {
     const loc = r.startLine === r.endLine ? `${r.startLine}` : `${r.startLine}-${r.endLine}`;
@@ -141,7 +144,7 @@ function runContext(parsed: ParsedArgs, cwd: string): CliResult {
     limit: parsed.limit,
     pathPrefix: parsed.pathPrefix,
     stateDir: parsed.stateDir,
-  });
+  }, ADAPTER);
   if (parsed.json) return ok(JSON.stringify(pkg, null, 2));
   const rows = pkg.readFirst.map((item) => {
     const reasons = item.reasons && item.reasons.length > 0 ? ` (${item.reasons.map((reason) => reason.kind).join(", ")})` : "";

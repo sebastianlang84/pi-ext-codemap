@@ -23,7 +23,7 @@ export default function codeMapExtension(pi: ExtensionAPI): void {
 
     let repoStatus: ReturnType<typeof codeMapStatus>;
     try {
-      repoStatus = codeMapStatus(ctx.cwd, {});
+      repoStatus = codeMapStatus(ctx.cwd, {}, "pi");
     } catch {
       return;
     }

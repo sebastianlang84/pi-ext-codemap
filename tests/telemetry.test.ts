@@ -15,6 +15,7 @@ const { pruneState, USAGE_LOG_MAX_BYTES } = await import("../src/core/state-gc.t
 interface UsageEvent {
   v: number;
   command: string;
+  adapter: string;
   outcome: string;
   latency_ms: number;
   tool_version: string;
@@ -64,6 +65,18 @@ test("a search appends a well-formed usage event with trimmed impressions", (t) 
   // No snippets in impressions — the path is the join key.
   assert.equal((impression as Record<string, unknown>).snippet, undefined);
   assert.equal(impression.path, "src/widget.ts");
+});
+
+test("the adapter tag reflects the calling surface, defaulting to unknown", (t) => {
+  const { root, stateDir } = tempRepo(t);
+  codeMapIndex(root, { approveRepo: true, stateDir }, "cli");
+  codeMapSearch(root, { query: "renderWidget", stateDir }, "mcp");
+  codeMapSearch(root, { query: "renderWidget", stateDir }); // omitted → unknown
+
+  const events = readEvents(stateDir);
+  assert.equal(events.find((event) => event.command === "index")?.adapter, "cli");
+  const searches = events.filter((event) => event.command === "search");
+  assert.deepEqual(searches.map((event) => event.adapter), ["mcp", "unknown"]);
 });
 
 test("a zero-result search records outcome empty", (t) => {

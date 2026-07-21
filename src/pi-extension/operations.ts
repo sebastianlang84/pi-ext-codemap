@@ -95,7 +95,7 @@ function parseContextArgs(args: string) {
 export const codeMapOperations: readonly CodeMapOperation[] = [
   {
     ...codeMapOperationMetadataById.status,
-    execute: codeMapStatus,
+    execute: (cwd, params) => codeMapStatus(cwd, params, "pi"),
     parseCommandArgs: parseStatusArgs,
     formatCommandResult(result) {
       return { message: JSON.stringify(result, null, 2), level: "info" };
@@ -103,7 +103,7 @@ export const codeMapOperations: readonly CodeMapOperation[] = [
   },
   {
     ...codeMapOperationMetadataById.index,
-    execute: codeMapIndex,
+    execute: (cwd, params) => codeMapIndex(cwd, params, "pi"),
     parseCommandArgs: parseIndexArgs,
     formatCommandResult(result) {
       return { message: `Indexed ${result.indexed}/${result.scanned} files (${result.skipped} skipped)`, level: "info" };
@@ -114,7 +114,7 @@ export const codeMapOperations: readonly CodeMapOperation[] = [
   },
   {
     ...codeMapOperationMetadataById.search,
-    execute: codeMapSearch,
+    execute: (cwd, params) => codeMapSearch(cwd, params, "pi"),
     parseCommandArgs: parseQueryArgs,
     formatCommandResult(result) {
       const warnings = result.warnings.length > 0 ? `${result.warnings.map((warning: string) => `⚠ ${warning}`).join("\n")}\n` : "";
@@ -127,7 +127,7 @@ export const codeMapOperations: readonly CodeMapOperation[] = [
   },
   {
     ...codeMapOperationMetadataById.context,
-    execute: codeMapContext,
+    execute: (cwd, params) => codeMapContext(cwd, params, "pi"),
     parseCommandArgs: parseContextArgs,
     formatCommandResult(result) {
       return { message: JSON.stringify(result, null, 2), level: "info" };

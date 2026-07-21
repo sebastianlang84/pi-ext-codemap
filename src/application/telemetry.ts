@@ -19,11 +19,15 @@ const USAGE_LOG_NAME = "usage.jsonl";
 
 export type TelemetryCommand = "search" | "context" | "index" | "status";
 export type TelemetryOutcome = "ok" | "empty" | "not_approved" | "error";
+/** Which host surface issued the call. Omitted (→ "unknown") for direct library calls (tests/scripts). */
+export type TelemetryAdapter = "cli" | "mcp" | "pi";
 
 interface RunOptions<P, R> {
   command: TelemetryCommand;
   cwd: string;
   params: P & { stateDir?: string; pathPrefix?: string };
+  /** Set by the calling adapter; falls back to "unknown" for direct library calls. */
+  adapter?: TelemetryAdapter;
   run: () => R;
   /** Best-effort repo root when the operation threw before returning one (e.g. not_approved). */
   resolveRoot?: () => string | undefined;
@@ -78,7 +82,7 @@ function buildEvent<P, R>(
     ts: new Date().toISOString(),
     tool_version: packageVersion(),
     command: options.command,
-    adapter: "unknown",
+    adapter: options.adapter ?? "unknown",
     latency_ms: latencyMs,
     outcome,
   };

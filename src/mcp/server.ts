@@ -36,10 +36,10 @@ export interface JsonRpcResponse {
 type Executor = (cwd: string, params: any) => unknown;
 
 const executors: Record<string, Executor> = {
-  codemap_status: codeMapStatus,
-  codemap_index: codeMapIndex,
-  codemap_search: codeMapSearch,
-  codemap_context: codeMapContext,
+  codemap_status: (cwd, params) => codeMapStatus(cwd, params, "mcp"),
+  codemap_index: (cwd, params) => codeMapIndex(cwd, params, "mcp"),
+  codemap_search: (cwd, params) => codeMapSearch(cwd, params, "mcp"),
+  codemap_context: (cwd, params) => codeMapContext(cwd, params, "mcp"),
 };
 
 const parametersByTool = new Map(codeMapOperationMetadata.map((operation) => [operation.toolName, operation.parameters]));

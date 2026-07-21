@@ -53,7 +53,7 @@ function buildEvent(options, result, caught, succeeded, outcome, latencyMs) {
         ts: new Date().toISOString(),
         tool_version: packageVersion(),
         command: options.command,
-        adapter: "unknown",
+        adapter: options.adapter ?? "unknown",
         latency_ms: latencyMs,
         outcome,
     };

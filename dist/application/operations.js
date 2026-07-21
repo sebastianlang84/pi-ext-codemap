@@ -22,11 +22,12 @@ function repoRootHint(cwd, params) {
 function effectiveSearchLimit(limit) {
     return Math.min(Math.max(limit ?? 10, 1), 50);
 }
-export function codeMapStatus(cwd, params) {
+export function codeMapStatus(cwd, params, adapter) {
     return runWithTelemetry({
         command: "status",
         cwd,
         params,
+        adapter,
         resolveRoot: () => repoRootHint(cwd, params),
         run: () => status(operationCwd(cwd, params), {
             health: params.full === true ? "full" : "cheap",
@@ -35,11 +36,12 @@ export function codeMapStatus(cwd, params) {
         }),
     });
 }
-export function codeMapIndex(cwd, params) {
+export function codeMapIndex(cwd, params, adapter) {
     return runWithTelemetry({
         command: "index",
         cwd,
         params,
+        adapter,
         resolveRoot: () => repoRootHint(cwd, params),
         run: () => indexRepo({
             cwd: operationCwd(cwd, params),
@@ -58,11 +60,12 @@ export function codeMapIndex(cwd, params) {
         }),
     });
 }
-export function codeMapSearch(cwd, params) {
+export function codeMapSearch(cwd, params, adapter) {
     return runWithTelemetry({
         command: "search",
         cwd,
         params,
+        adapter,
         resolveRoot: () => repoRootHint(cwd, params),
         run: () => searchCodeMapWithDiagnostics({
             query: params.query,
@@ -84,11 +87,12 @@ export function codeMapSearch(cwd, params) {
         }),
     });
 }
-export function codeMapContext(cwd, params) {
+export function codeMapContext(cwd, params, adapter) {
     return runWithTelemetry({
         command: "context",
         cwd,
         params,
+        adapter,
         resolveRoot: () => repoRootHint(cwd, params),
         run: () => codemapContext({
             target: params.target,

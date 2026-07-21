@@ -174,8 +174,9 @@ Verified against code: `SearchResult` exposes `path`/`language`/`kind`/`score`
 
 ### Known limitations of the shipped fingerprint (caveat F)
 
-- `adapter` is `"unknown"` at the operations seam (it can't cheaply know its caller without changing
-  the adapter-facing signatures MCP/Pi consume).
+- `adapter` is set by the calling surface via an optional third argument to the `codeMap*` seam
+  functions (`cli`/`mcp`/`pi`). `"unknown"` remains the documented fallback for direct library calls
+  (tests, scripts) that omit it.
 - `ppid_chain` is Linux-only (`/proc`), starts at the parent pid (the ephemeral codemap pid is excluded
   so the hash is stable across an agent's invocations), and is defeated by an intermediate shell wrapper
   that gets a fresh pid per call. Validate against a known parallel-sub-agent run before trusting the

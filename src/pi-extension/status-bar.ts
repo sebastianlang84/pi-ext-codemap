@@ -8,7 +8,7 @@ const STATUS_ERROR_TEXT = "[CodeMap ✗]";
 /** Compute the footer status pill for a repo root. Never throws. */
 export function computeStatusText(cwd: string): string {
   try {
-    return codeMapStatus(cwd, {}).readiness === "ready" ? STATUS_OK_TEXT : STATUS_NOT_INDEXED_TEXT;
+    return codeMapStatus(cwd, {}, "pi").readiness === "ready" ? STATUS_OK_TEXT : STATUS_NOT_INDEXED_TEXT;
   } catch {
     return STATUS_ERROR_TEXT;
   }
