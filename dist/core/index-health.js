@@ -1,4 +1,5 @@
 import { readGitHead, readGitWorkingTreeStatus } from "./git-status.js";
+import { readIndexedFileStats } from "./index-store.js";
 import { scanRepo } from "./scanner.js";
 import { escapeLike } from "./text-util.js";
 export function readIndexStatusCounts(db, pathPrefix = "") {
@@ -42,11 +43,18 @@ export function cheapIndexHealth(db, root, pathPrefix = "") {
     return { stale, changed: 0, missing: 0, deleted: 0, currentHead, headChanged, dirty: false, dirtyFiles: [], warnings };
 }
 export function fullIndexHealth(db, root, pathPrefix = "") {
-    const scan = scanRepo(root, { pathPrefix });
-    const rows = (pathPrefix
-        ? db.prepare("select path, hash from files where path like ? escape '\\'").all(`${escapeLike(pathPrefix)}%`)
-        : db.prepare("select path, hash from files").all());
-    const indexed = new Map(rows.map((row) => [row.path, row.hash]));
+    // Reuse the indexer's mtime+size fastpath so unchanged files are not re-read and re-hashed on every
+    // `context` / `status --health full` call: a single files read serves both the scanner fastpath and
+    // the comparison map. `text` is never consumed here (only `hash`), so — unlike the incremental
+    // indexer (indexer.ts) — no forced-reindex guard is needed. The `path = ?`/LIKE-prefix filter the
+    // old query used is equivalent to `startsWith(pathPrefix)` (pathPrefix is a normalized dir prefix).
+    const knownFiles = readIndexedFileStats(db);
+    const scan = scanRepo(root, { pathPrefix, knownFiles });
+    const indexed = new Map();
+    for (const [path, stat] of knownFiles) {
+        if (!pathPrefix || path.startsWith(pathPrefix))
+            indexed.set(path, stat.hash);
+    }
     const current = new Map(scan.files.map((file) => [file.relPath, file.hash]));
     let changed = 0;
     let missing = 0;

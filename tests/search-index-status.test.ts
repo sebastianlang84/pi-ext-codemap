@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -121,6 +121,92 @@ test("full status reports git head and dirty tracked files", (t) => {
   assert.equal(committed.headChanged, true);
   assert.equal(committed.dirty, false);
   assert.deepEqual(committed.dirtyFiles, []);
+});
+
+test("full health reuses the mtime+size fastpath: a same-size edit with restored mtime is not re-hashed", (t) => {
+  // Documents the accepted tradeoff (identical to the incremental indexer): if size and rounded mtime
+  // match the index, the stored hash is trusted without re-reading. Before the fastpath was threaded
+  // through fullIndexHealth this scenario re-hashed and reported `changed: 1`.
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-fastpath-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src"), { recursive: true });
+  const file = join(root, "src", "a.ts");
+  writeFileSync(file, "export const value = 1;\n");
+  indexRepo({ cwd: root, approve: true });
+  const before = statSync(file);
+
+  writeFileSync(file, "export const value = 2;\n"); // same length, different content
+  utimesSync(file, before.atime, before.mtime); // restore mtime → fastpath sees "unchanged"
+
+  const health = status(root, { health: "full" });
+  assert.equal(health.changed, 0);
+  assert.equal(health.stale, false);
+});
+
+test("full health still hash-compares on a pure touch: new mtime, identical content is not flagged", (t) => {
+  // The fastpath only skips the read; it never replaces the hash comparison. A touch (mtime changes,
+  // content identical) misses the fastpath and is rescued by the hash equality check.
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-touch-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src"), { recursive: true });
+  const file = join(root, "src", "b.ts");
+  writeFileSync(file, "export const value = 1;\n");
+  indexRepo({ cwd: root, approve: true });
+  const before = statSync(file);
+
+  const touched = new Date(before.mtimeMs + 120_000);
+  utimesSync(file, touched, touched); // new mtime, content untouched
+
+  const health = status(root, { health: "full" });
+  assert.equal(health.changed, 0);
+  assert.equal(health.stale, false);
+});
+
+test("context resolves an ambiguous basename deterministically and warns", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-ambig-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src", "application"), { recursive: true });
+  mkdirSync(join(root, "src", "pi-extension"), { recursive: true });
+  writeFileSync(join(root, "src", "application", "operations.ts"), "export function applicationOps() { return 1; }\n");
+  writeFileSync(join(root, "src", "pi-extension", "operations.ts"), "export function piOps() { return 2; }\n");
+  indexRepo({ cwd: root, approve: true });
+
+  const result = codemapContext({ cwd: root, target: "operations.ts", limit: 5 });
+  // Shortest path wins the tie: src/application/operations.ts (29) < src/pi-extension/operations.ts (30).
+  assert.equal(result.readFirst[0]?.path, "src/application/operations.ts");
+  assert.match(result.warnings.join("\n"), /Ambiguous target "operations\.ts"/);
+  assert.match(result.warnings.join("\n"), /src\/pi-extension\/operations\.ts/);
+});
+
+test("context breaks ambiguous equal-length ties lexicographically", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-tie-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src", "bbb"), { recursive: true });
+  mkdirSync(join(root, "src", "aaa"), { recursive: true });
+  writeFileSync(join(root, "src", "bbb", "handler.ts"), "export function bbbHandler() { return 1; }\n");
+  writeFileSync(join(root, "src", "aaa", "handler.ts"), "export function aaaHandler() { return 2; }\n");
+  indexRepo({ cwd: root, approve: true });
+
+  const result = codemapContext({ cwd: root, target: "handler.ts", limit: 5 });
+  assert.equal(result.readFirst[0]?.path, "src/aaa/handler.ts");
+  assert.match(result.warnings.join("\n"), /Ambiguous target/);
+});
+
+test("context does not warn for an unambiguous target", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pi-codemap-unambig-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src", "only.ts"), "export function onlyOne() { return 1; }\n");
+  indexRepo({ cwd: root, approve: true });
+
+  const result = codemapContext({ cwd: root, target: "src/only.ts", limit: 5 });
+  assert.equal(result.readFirst[0]?.path, "src/only.ts");
+  assert.doesNotMatch(result.warnings.join("\n"), /Ambiguous target/);
 });
 
 test("status pathPrefix treats LIKE wildcards literally", (t) => {

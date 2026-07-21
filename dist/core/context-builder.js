@@ -85,8 +85,18 @@ function normalizeContextRequest(options) {
     };
 }
 function readFirstItems(db, request, warnings, cwd, stateDir) {
-    const file = db.prepare("select id, path, language from files where (path = ? or path like ? escape '\\') and path like ? escape '\\' limit 1")
-        .get(request.target, request.targetLike, request.pathFilter);
+    // Deterministic target resolution: an exact path wins, then the shortest path, then lexicographic.
+    // Without ORDER BY the old `limit 1` returned whichever row SQLite scanned first — for an ambiguous
+    // basename (e.g. two `operations.ts`) that anchor was unspecified, the exact "wrong-anchor" failure
+    // the confidence logic warns about. `limit 6` bounds the query for pathological broad targets.
+    const matches = db.prepare("select id, path, language from files where (path = ? or path like ? escape '\\') and path like ? escape '\\' " +
+        "order by (path = ?) desc, length(path), path limit 6").all(request.target, request.targetLike, request.pathFilter, request.target);
+    const file = matches[0];
+    if (matches.length > 1) {
+        const alternatives = matches.slice(1, 4).map((match) => match.path).join(", ");
+        const count = matches.length >= 6 ? "6 or more" : String(matches.length);
+        warnings.push(`Ambiguous target "${request.target}" matched ${count} indexed files; using ${file.path}. Other matches: ${alternatives}${matches.length > 4 ? ", …" : ""}`);
+    }
     if (!file) {
         warnings.push("Target was not an indexed file path; falling back to search results.");
         return {
